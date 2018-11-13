@@ -1,5 +1,5 @@
 /*
- * Copyright 2017 The RoboZonky Project
+ * Copyright 2018 The RoboZonky Project
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -20,7 +20,7 @@ import java.util.Optional;
 import java.util.UUID;
 
 import com.github.robozonky.app.AbstractZonkyLeveragingTest;
-import com.github.robozonky.app.configuration.daemon.DaemonInvestmentMode;
+import com.github.robozonky.app.daemon.DaemonInvestmentMode;
 import com.github.robozonky.common.secrets.SecretProvider;
 import org.junit.jupiter.api.Test;
 
@@ -35,16 +35,11 @@ class OperatingModeTest extends AbstractZonkyLeveragingTest {
 
     @Test
     void withConfirmation() {
-        final TweaksCommandLineFragment f = mock(TweaksCommandLineFragment.class);
-        when(f.isDryRunEnabled()).thenReturn(true);
         final CommandLine cli = mock(CommandLine.class);
-        when(cli.getTweaksFragment()).thenReturn(f);
+        when(cli.isDryRunEnabled()).thenReturn(true);
         when(cli.getStrategyLocation()).thenReturn("");
-        when(cli.getMarketplace()).thenReturn(new MarketplaceCommandLineFragment());
         final SecretProvider secretProvider = SecretProvider.inMemory("user", "pass".toCharArray());
-        final ConfirmationCommandLineFragment fragment = new ConfirmationCommandLineFragment();
-        fragment.confirmationCredentials = SERVICE + ":" + SERVICE_TOKEN;
-        when(cli.getConfirmationFragment()).thenReturn(fragment);
+        when(cli.getConfirmationCredentials()).thenReturn(Optional.of(SERVICE + ":" + SERVICE_TOKEN));
         final OperatingMode mode = new OperatingMode(t -> {
         });
         final Optional<InvestmentMode> config = mode.configure(cli, secretProvider);
@@ -57,11 +52,8 @@ class OperatingModeTest extends AbstractZonkyLeveragingTest {
     @Test
     void withConfirmationAndUnknownId() {
         final CommandLine cli = mock(CommandLine.class);
-        when(cli.getTweaksFragment()).thenReturn(mock(TweaksCommandLineFragment.class));
         final SecretProvider secretProvider = SecretProvider.inMemory("user", "pass".toCharArray());
-        final ConfirmationCommandLineFragment fragment = new ConfirmationCommandLineFragment();
-        fragment.confirmationCredentials = UUID.randomUUID().toString();
-        when(cli.getConfirmationFragment()).thenReturn(fragment);
+        when(cli.getConfirmationCredentials()).thenReturn(Optional.of(UUID.randomUUID().toString()));
         final OperatingMode mode = new OperatingMode(t -> {
         });
         final Optional<InvestmentMode> config = mode.configure(cli, secretProvider);
@@ -72,11 +64,8 @@ class OperatingModeTest extends AbstractZonkyLeveragingTest {
     @Test
     void withConfirmationAndNoSecret() {
         final CommandLine cli = mock(CommandLine.class);
-        when(cli.getTweaksFragment()).thenReturn(mock(TweaksCommandLineFragment.class));
         final SecretProvider secretProvider = SecretProvider.inMemory("user", "pass".toCharArray());
-        final ConfirmationCommandLineFragment fragment = new ConfirmationCommandLineFragment();
-        fragment.confirmationCredentials = SERVICE;
-        when(cli.getConfirmationFragment()).thenReturn(fragment);
+        when(cli.getConfirmationCredentials()).thenReturn(Optional.of(SERVICE));
         final OperatingMode mode = new OperatingMode(t -> {
         });
         final Optional<InvestmentMode> config = mode.configure(cli, secretProvider);
@@ -87,10 +76,7 @@ class OperatingModeTest extends AbstractZonkyLeveragingTest {
     @Test
     void withoutConfirmation() {
         final CommandLine cli = mock(CommandLine.class);
-        when(cli.getTweaksFragment()).thenReturn(mock(TweaksCommandLineFragment.class));
         when(cli.getStrategyLocation()).thenReturn("");
-        when(cli.getMarketplace()).thenReturn(new MarketplaceCommandLineFragment());
-        when(cli.getConfirmationFragment()).thenReturn(mock(ConfirmationCommandLineFragment.class));
         final SecretProvider secretProvider = SecretProvider.inMemory("user", new char[0]);
         final OperatingMode mode = new OperatingMode(t -> {
         });

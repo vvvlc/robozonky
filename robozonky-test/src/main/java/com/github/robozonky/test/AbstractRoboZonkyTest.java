@@ -16,11 +16,19 @@
 
 package com.github.robozonky.test;
 
+import java.math.BigDecimal;
 import java.util.function.Consumer;
 import java.util.function.Function;
 import java.util.function.Supplier;
+import java.util.stream.Stream;
 
+import com.github.robozonky.api.SessionInfo;
+import com.github.robozonky.api.remote.entities.Restrictions;
+import com.github.robozonky.api.remote.entities.Statistics;
+import com.github.robozonky.api.remote.entities.Wallet;
 import com.github.robozonky.api.remote.entities.ZonkyApiToken;
+import com.github.robozonky.api.strategies.PortfolioOverview;
+import com.github.robozonky.common.Tenant;
 import com.github.robozonky.common.remote.ApiProvider;
 import com.github.robozonky.common.remote.OAuth;
 import com.github.robozonky.common.remote.Zonky;
@@ -33,9 +41,11 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.anyInt;
 import static org.mockito.Mockito.doAnswer;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.reset;
+import static org.mockito.Mockito.spy;
 import static org.mockito.Mockito.when;
 
 /**
@@ -44,7 +54,36 @@ import static org.mockito.Mockito.when;
  */
 public abstract class AbstractRoboZonkyTest {
 
+    protected static final SessionInfo SESSION = new SessionInfo("someone@robozonky.cz", "Testing",
+                                                                 false),
+            SESSION_DRY = new SessionInfo("someone@robozonky.cz", "Testing", true);
+
     private static final Logger LOGGER = LoggerFactory.getLogger(AbstractRoboZonkyTest.class);
+
+    protected static Zonky harmlessZonky(final int availableBalance) {
+        final Zonky zonky = mock(Zonky.class);
+        final BigDecimal balance = BigDecimal.valueOf(availableBalance);
+        when(zonky.getWallet()).thenReturn(new Wallet(1, 2, balance, balance));
+        when(zonky.getRestrictions()).thenReturn(new Restrictions());
+        when(zonky.getBlockedAmounts()).thenAnswer(i -> Stream.empty());
+        when(zonky.getStatistics()).thenReturn(Statistics.empty());
+        when(zonky.getDevelopments(anyInt())).thenAnswer(i -> Stream.empty());
+        return zonky;
+    }
+
+    protected static Tenant mockTenant(final Zonky zonky) {
+        return mockTenant(zonky, true);
+    }
+
+    @SuppressWarnings("unchecked")
+    protected static Tenant mockTenant(final Zonky zonky, final boolean isDryRun) {
+        final Tenant auth = new TestingTenant(isDryRun ? SESSION_DRY : SESSION, zonky);
+        return spy(auth);
+    }
+
+    protected static Tenant mockTenant() {
+        return mockTenant(harmlessZonky(10_000));
+    }
 
     @SuppressWarnings("unchecked")
     protected static ApiProvider mockApiProvider(final OAuth oauth, final Zonky z) {
@@ -70,6 +109,23 @@ public abstract class AbstractRoboZonkyTest {
     @BeforeAll
     static void loadSystemProperties() {
         SystemProperties.INSTANCE.save();
+    }
+
+    protected static PortfolioOverview mockPortfolioOverview(final int balance) {
+        final PortfolioOverview po = mock(PortfolioOverview.class);
+        when(po.getCzkAvailable()).thenReturn(BigDecimal.valueOf(balance));
+        when(po.getCzkInvested()).thenReturn(BigDecimal.ZERO);
+        when(po.getCzkInvested(any())).thenReturn(BigDecimal.ZERO);
+        when(po.getCzkAtRisk()).thenReturn(BigDecimal.ZERO);
+        when(po.getCzkAtRisk(any())).thenReturn(BigDecimal.ZERO);
+        when(po.getShareAtRisk()).thenReturn(BigDecimal.ZERO);
+        when(po.getShareOnInvestment(any())).thenReturn(BigDecimal.ZERO);
+        when(po.getAtRiskShareOnInvestment(any())).thenReturn(BigDecimal.ZERO);
+        return po;
+    }
+
+    protected static PortfolioOverview mockPortfolioOverview() {
+        return mockPortfolioOverview(0);
     }
 
     @AfterEach

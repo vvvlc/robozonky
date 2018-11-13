@@ -24,14 +24,20 @@ import com.google.api.client.http.HttpTransport;
 public enum Properties {
 
     /**
-     * Google Drive's file ID of the master Stonky spreadsheet, to be copied for each user.
+     * Google Drive's file ID of the master Stonky spreadsheet, to be copied for each user. If null, the latest version
+     * of Stonky will be used.
      */
-    STONKY_MASTER("robozonky.stonky.master_gdrive_id", "1ZnY1hJSsIuUZVF10dtk-GI09l2_RHJTSlgH75Opi7V8"),
+    STONKY_MASTER("robozonky.stonky.master_gdrive_id", null),
     /**
-     * Google Drive's file ID to the spreadsheet where the user wants the XLS from Zonky imported. If blank, will be
+     * Google Drive's file ID to the spreadsheet where the user wants the XLS from Zonky imported. If null, will be
      * autodetected.
      */
     STONKY_COPY("robozonky.stonky.gdrive_id", null),
+    /**
+     * Name (not path) of the folder where RoboZonky will be looking up Google credentials. Will always be relative to
+     * the current working directory.
+     */
+    GOOGLE_LOCAL_FOLDER("robozonky.google.local_credentials_folder", "Google"),
     /**
      * To give to {@link GoogleCredentialProvider#live(HttpTransport, String, int)}.
      */

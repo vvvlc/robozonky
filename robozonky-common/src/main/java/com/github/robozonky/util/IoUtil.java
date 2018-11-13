@@ -32,19 +32,30 @@ public final class IoUtil {
      * conditions.
      * @param in
      * @param f
+     * @param <S>
      * @param <T>
      * @return
      * @throws IOException
      */
-    public static <T, S extends Closeable> T applyCloseable(final ThrowingSupplier<S> in,
-                                                            final ThrowingFunction<S, T> f) throws IOException {
+    public static <T, S extends Closeable> T tryFunction(final ThrowingSupplier<S> in,
+                                                         final ThrowingFunction<S, T> f) throws IOException {
         try (final S s = in.get()) {
             return f.apply(s);
         }
     }
 
-    public static <S extends Closeable> void acceptCloseable(final ThrowingSupplier<S> in,
-                                                             final ThrowingConsumer<S> f) throws IOException {
+    /**
+     * The whole point of this method existing is that PITest will generate several entirely untestable mutations in the
+     * try-with-resources blocks, complaining of untested calls to close() etc. Instead of crippling the code by no
+     * longer using try-with-resources, we centralize all those calls to this method, where we can test all the
+     * conditions.
+     * @param in
+     * @param f
+     * @param <S>
+     * @throws IOException
+     */
+    public static <S extends Closeable> void tryConsumer(final ThrowingSupplier<S> in,
+                                                         final ThrowingConsumer<S> f) throws IOException {
         try (final S s = in.get()) {
             f.accept(s);
         }

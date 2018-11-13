@@ -1,5 +1,5 @@
 /*
- * Copyright 2017 The RoboZonky Project
+ * Copyright 2018 The RoboZonky Project
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -18,11 +18,9 @@ package com.github.robozonky.strategy.natural;
 
 import java.math.BigDecimal;
 import java.util.Collection;
-import java.util.Collections;
 import java.util.Comparator;
+import java.util.List;
 import java.util.Map;
-import java.util.function.Function;
-import java.util.stream.Collectors;
 import java.util.stream.Stream;
 
 import com.github.robozonky.api.remote.entities.Participation;
@@ -33,7 +31,7 @@ import com.github.robozonky.api.strategies.PortfolioOverview;
 import com.github.robozonky.api.strategies.PurchaseStrategy;
 import com.github.robozonky.api.strategies.RecommendedParticipation;
 
-public class NaturalLanguagePurchaseStrategy implements PurchaseStrategy {
+class NaturalLanguagePurchaseStrategy implements PurchaseStrategy {
 
     private static final Comparator<ParticipationDescriptor> COMPARATOR = new SecondaryMarketplaceComparator();
     private final ParsedStrategy strategy;
@@ -42,10 +40,6 @@ public class NaturalLanguagePurchaseStrategy implements PurchaseStrategy {
         this.strategy = p;
     }
 
-    private static Map<Rating, Collection<ParticipationDescriptor>> sortByRating(
-            final Stream<ParticipationDescriptor> items) {
-        return Collections.unmodifiableMap(items.distinct().collect(Collectors.groupingBy(l -> l.item().getRating())));
-    }
 
     private int[] getRecommendationBoundaries(final Participation participation) {
         final Rating rating = participation.getRating();
@@ -56,7 +50,7 @@ public class NaturalLanguagePurchaseStrategy implements PurchaseStrategy {
 
     boolean sizeMatchesStrategy(final Participation participation, final BigDecimal balance) {
         final int id = participation.getLoanId();
-        final int participationId = participation.getId();
+        final long participationId = participation.getId();
         final int[] recommended = getRecommendationBoundaries(participation);
         final int minimumRecommendation = recommended[0];
         final int maximumRecommendation = recommended[1];
@@ -91,19 +85,13 @@ public class NaturalLanguagePurchaseStrategy implements PurchaseStrategy {
             return Stream.empty();
         }
         // split available marketplace into buckets per rating
-        final Map<Rating, Collection<ParticipationDescriptor>> splitByRating =
-                sortByRating(strategy.getApplicableParticipations(available));
-        // prepare map of ratings and their shares
-        final Map<Rating, BigDecimal> relevantPortfolio = splitByRating.keySet().stream()
-                .collect(Collectors.toMap(Function.identity(), portfolio::getShareOnInvestment));
+        final Map<Rating, List<ParticipationDescriptor>> splitByRating =
+                Util.sortByRating(strategy.getApplicableParticipations(available), d -> d.item().getRating());
         // recommend amount to invest per strategy
-        return Util.rankRatingsByDemand(strategy, relevantPortfolio)
-                .flatMap(rating -> { // prioritize marketplace by their ranking's demand
-                    return splitByRating.get(rating).stream().sorted(COMPARATOR);
-                })
+        return Util.rankRatingsByDemand(strategy, splitByRating.keySet(), portfolio)
+                .flatMap(rating -> splitByRating.get(rating).stream().sorted(COMPARATOR))
                 .peek(d -> Decisions.report(logger -> logger.trace("Evaluating {}.", d.item())))
                 .filter(d -> sizeMatchesStrategy(d.item(), portfolio.getCzkAvailable()))
-                .map(ParticipationDescriptor::recommend) // must do full amount; Zonky enforces
-                .flatMap(r -> r.map(Stream::of).orElse(Stream.empty()));
+                .flatMap(d -> d.recommend().map(Stream::of).orElse(Stream.empty()));
     }
 }

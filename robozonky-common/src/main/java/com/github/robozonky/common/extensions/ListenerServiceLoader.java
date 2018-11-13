@@ -28,7 +28,7 @@ import com.github.robozonky.api.notifications.Event;
 import com.github.robozonky.api.notifications.EventListenerSupplier;
 import com.github.robozonky.api.notifications.ListenerService;
 import com.github.robozonky.common.state.TenantState;
-import com.github.robozonky.util.LazyInitialized;
+import com.github.robozonky.internal.util.LazyInitialized;
 import com.github.robozonky.util.StreamUtil;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -103,6 +103,7 @@ public final class ListenerServiceLoader {
 
     static <T extends Event> List<EventListenerSupplier<T>> load(final Class<T> eventType,
                                                                  final Iterable<ListenerService> loader) {
+        LOGGER.debug("Loading listeners for {}.", eventType);
         return StreamUtil.toStream(loader)
                 .peek(s -> ListenerServiceLoader.LOGGER.debug("Processing '{}'.", s.getClass()))
                 .flatMap(s -> s.findListeners(eventType))

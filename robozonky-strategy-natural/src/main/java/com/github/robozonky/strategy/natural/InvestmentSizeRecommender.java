@@ -1,5 +1,5 @@
 /*
- * Copyright 2017 The RoboZonky Project
+ * Copyright 2018 The RoboZonky Project
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -21,14 +21,10 @@ import java.math.RoundingMode;
 import java.util.function.BiFunction;
 
 import com.github.robozonky.api.remote.entities.Restrictions;
-import com.github.robozonky.api.remote.entities.sanitized.Loan;
+import com.github.robozonky.api.remote.entities.sanitized.MarketplaceLoan;
 import com.github.robozonky.api.remote.enums.Rating;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
 
-class InvestmentSizeRecommender implements BiFunction<Loan, Integer, Integer> {
-
-    private static final Logger LOGGER = LoggerFactory.getLogger(InvestmentSizeRecommender.class);
+class InvestmentSizeRecommender implements BiFunction<MarketplaceLoan, Integer, Integer> {
 
     private final ParsedStrategy strategy;
     private final Restrictions restrictions;
@@ -49,7 +45,7 @@ class InvestmentSizeRecommender implements BiFunction<Loan, Integer, Integer> {
                 .intValue();
     }
 
-    private int[] getInvestmentBounds(final ParsedStrategy strategy, final Loan loan) {
+    private int[] getInvestmentBounds(final ParsedStrategy strategy, final MarketplaceLoan loan) {
         final Rating rating = loan.getRating();
         final int absoluteMinimum = Math.max(strategy.getMinimumInvestmentSizeInCzk(rating),
                                              restrictions.getMinimumInvestmentAmount());
@@ -58,12 +54,12 @@ class InvestmentSizeRecommender implements BiFunction<Loan, Integer, Integer> {
                                                                       restrictions.getInvestmentStep());
         final int maximumInvestmentAmount = restrictions.getMaximumInvestmentAmount();
         if (maximumUserRecommendation > maximumInvestmentAmount) {
-            LOGGER.info("Maximum investment amount reduced to {} by Zonky.", maximumInvestmentAmount);
+            Decisions.report(l -> l.info("Maximum investment amount reduced to {} by Zonky.", maximumInvestmentAmount));
         }
         final int maximumRecommendation = Math.min(maximumUserRecommendation, maximumInvestmentAmount);
         final int loanId = loan.getId();
-        LOGGER.trace("Strategy gives investment range for loan #{} of <{}; {}> CZK.", loanId,
-                     minimumRecommendation, maximumRecommendation);
+        Decisions.report(l -> l.trace("Strategy gives investment range for loan #{} of <{}; {}> CZK.", loanId,
+                                      minimumRecommendation, maximumRecommendation));
         final int minimumInvestmentByShare =
                 getPercentage(loan.getAmount(), strategy.getMinimumInvestmentShareInPercent());
         final int minimumInvestment =
@@ -77,29 +73,29 @@ class InvestmentSizeRecommender implements BiFunction<Loan, Integer, Integer> {
     }
 
     @Override
-    public Integer apply(final Loan loan, final Integer balance) {
+    public Integer apply(final MarketplaceLoan loan, final Integer balance) {
         final int id = loan.getId();
         final int[] recommended = getInvestmentBounds(strategy, loan);
         final int minimumRecommendation = recommended[0];
         final int maximumRecommendation = recommended[1];
-        LOGGER.debug("Recommended investment range for loan #{} is <{}; {}> CZK.", id, minimumRecommendation,
-                     maximumRecommendation);
+        Decisions.report(l -> l.debug("Recommended investment range for loan #{} is <{}; {}> CZK.", id,
+                                      minimumRecommendation, maximumRecommendation));
         // round to nearest lower increment
         final int loanRemaining = loan.getRemainingInvestment();
         if (minimumRecommendation > balance) {
-            LOGGER.debug("Not recommending loan #{} due to minimum over balance.", id);
+            Decisions.report(l -> l.debug("Not recommending loan #{} due to minimum over balance.", id));
             return 0;
         } else if (minimumRecommendation > loanRemaining) {
-            LOGGER.debug("Not recommending loan #{} due to minimum over remaining.", id);
+            Decisions.report(l -> l.debug("Not recommending loan #{} due to minimum over remaining.", id));
             return 0;
         }
         final int recommendedAmount = Math.min(balance, Math.min(maximumRecommendation, loanRemaining));
         final int r = roundToNearestIncrement(recommendedAmount, restrictions.getInvestmentStep());
         if (r < minimumRecommendation) {
-            LOGGER.debug("Not recommending loan #{} due to recommendation below minimum.", id);
+            Decisions.report(l -> l.debug("Not recommending loan #{} due to recommendation below minimum.", id));
             return 0;
         } else {
-            LOGGER.debug("Final recommendation for loan #{} is {} CZK.", id, r);
+            Decisions.report(l -> l.debug("Final recommendation for loan #{} is {} CZK.", id, r));
             return r;
         }
     }

@@ -1,5 +1,5 @@
 /*
- * Copyright 2017 The RoboZonky Project
+ * Copyright 2018 The RoboZonky Project
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -20,6 +20,7 @@ import java.util.Collection;
 import java.util.Collections;
 import java.util.List;
 import java.util.concurrent.Callable;
+import java.util.concurrent.Delayed;
 import java.util.concurrent.Future;
 import java.util.concurrent.ScheduledFuture;
 import java.util.concurrent.TimeUnit;
@@ -37,79 +38,23 @@ class TestingScheduledExecutorService implements PausableScheduledExecutorServic
 
     private static final Logger LOGGER = LoggerFactory.getLogger(TestingScheduledExecutorService.class);
 
-    @Override
-    public ScheduledFuture<?> schedule(final Runnable runnable, final long l, final TimeUnit timeUnit) {
-        return scheduleWithFixedDelay(runnable, l, 0, timeUnit);
-    }
+    private boolean wasShutdown = false;
 
-    @Override
-    public <V> ScheduledFuture<V> schedule(final Callable<V> callable, final long l, final TimeUnit timeUnit) {
-        submit(callable);
-        return null;
-    }
+    private static ScheduledFuture<?> getFuture() {
+        return new ScheduledFuture<Object>() {
+            @Override
+            public int compareTo(final Delayed o) {
+                throw new UnsupportedOperationException();
+            }
 
-    @Override
-    public ScheduledFuture<?> scheduleAtFixedRate(final Runnable runnable, final long l, final long l1,
-                                                  final TimeUnit timeUnit) {
-        submit(runnable);
-        return null;
-    }
+            @Override
+            public long getDelay(final TimeUnit unit) {
+                throw new UnsupportedOperationException();
+            }
 
-    @Override
-    public ScheduledFuture<?> scheduleWithFixedDelay(final Runnable runnable, final long l, final long l1,
-                                                     final TimeUnit timeUnit) {
-        submit(runnable);
-        return null;
-    }
-
-    @Override
-    public void shutdown() {
-        // no need to do anything
-    }
-
-    @Override
-    public List<Runnable> shutdownNow() {
-        return Collections.emptyList();
-    }
-
-    @Override
-    public boolean isShutdown() {
-        return false;
-    }
-
-    @Override
-    public boolean isTerminated() {
-        return false;
-    }
-
-    @Override
-    public boolean awaitTermination(final long l, final TimeUnit timeUnit) {
-        throw new UnsupportedOperationException();
-    }
-
-    @Override
-    public <T> Future<T> submit(final Callable<T> callable) {
-        try {
-            callable.call();
-        } catch (final Exception ex) {
-            LOGGER.warn("Callable failed.", ex);
-        }
-        return null;
-    }
-
-    @Override
-    public <T> Future<T> submit(final Runnable runnable, final T t) {
-        execute(runnable);
-        return null;
-    }
-
-    @Override
-    public Future<?> submit(final Runnable runnable) {
-        execute(runnable);
-        return new Future<Object>() {
             @Override
             public boolean cancel(final boolean mayInterruptIfRunning) {
-                throw new UnsupportedOperationException();
+                return true;
             }
 
             @Override
@@ -135,6 +80,78 @@ class TestingScheduledExecutorService implements PausableScheduledExecutorServic
     }
 
     @Override
+    public ScheduledFuture<?> schedule(final Runnable runnable, final long l, final TimeUnit timeUnit) {
+        return scheduleWithFixedDelay(runnable, l, 0, timeUnit);
+    }
+
+    @Override
+    public <V> ScheduledFuture<V> schedule(final Callable<V> callable, final long l, final TimeUnit timeUnit) {
+        return (ScheduledFuture<V>) submit(callable);
+    }
+
+    @Override
+    public ScheduledFuture<?> scheduleAtFixedRate(final Runnable runnable, final long l, final long l1,
+                                                  final TimeUnit timeUnit) {
+        return submit(runnable);
+    }
+
+    @Override
+    public ScheduledFuture<?> scheduleWithFixedDelay(final Runnable runnable, final long l, final long l1,
+                                                     final TimeUnit timeUnit) {
+        return submit(runnable);
+    }
+
+    @Override
+    public void shutdown() {
+        this.wasShutdown = true;
+    }
+
+    @Override
+    public List<Runnable> shutdownNow() {
+        shutdown();
+        return Collections.emptyList();
+    }
+
+    @Override
+    public boolean isShutdown() {
+        return wasShutdown;
+    }
+
+    @Override
+    public boolean isTerminated() {
+        return wasShutdown;
+    }
+
+    @Override
+    public boolean awaitTermination(final long l, final TimeUnit timeUnit) {
+        return true;
+    }
+
+    @SuppressWarnings("unchecked")
+    @Override
+    public <T> Future<T> submit(final Callable<T> callable) {
+        try {
+            callable.call();
+            return (Future<T>) getFuture();
+        } catch (final Exception ex) {
+            LOGGER.warn("Callable failed.", ex);
+            return null;
+        }
+    }
+
+    @Override
+    @SuppressWarnings("unchecked")
+    public <T> ScheduledFuture<T> submit(final Runnable runnable, final T t) {
+        return (ScheduledFuture<T>) submit(runnable);
+    }
+
+    @Override
+    public ScheduledFuture<?> submit(final Runnable runnable) {
+        execute(runnable);
+        return getFuture();
+    }
+
+    @Override
     public <T> List<Future<T>> invokeAll(final Collection<? extends Callable<T>> collection) {
         throw new UnsupportedOperationException();
     }
@@ -146,8 +163,7 @@ class TestingScheduledExecutorService implements PausableScheduledExecutorServic
     }
 
     @Override
-    public <T> T invokeAny(
-            final Collection<? extends Callable<T>> collection) {
+    public <T> T invokeAny(final Collection<? extends Callable<T>> collection) {
         throw new UnsupportedOperationException();
     }
 
@@ -158,10 +174,13 @@ class TestingScheduledExecutorService implements PausableScheduledExecutorServic
 
     @Override
     public void execute(final Runnable runnable) {
+        LOGGER.debug("Started executing task {}.", runnable);
         try {
             runnable.run();
         } catch (final Exception ex) {
             LOGGER.warn("Task execution failed.", ex);
+        } finally {
+            LOGGER.debug("Finished executing task.");
         }
     }
 

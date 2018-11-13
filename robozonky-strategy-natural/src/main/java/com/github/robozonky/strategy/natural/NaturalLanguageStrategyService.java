@@ -1,5 +1,5 @@
 /*
- * Copyright 2017 The RoboZonky Project
+ * Copyright 2018 The RoboZonky Project
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -47,7 +47,7 @@ public class NaturalLanguageStrategyService implements StrategyService {
         return Optional.ofNullable(CACHE.get().get(strategy));
     }
 
-    private synchronized static ParsedStrategy parseOrCached(final String strategy) {
+    private static synchronized ParsedStrategy parseOrCached(final String strategy) {
         return getCached(strategy).orElseGet(() -> {
             LOGGER.trace("Parsing started.");
             final ParsedStrategy parsed = parseWithAntlr(CharStreams.fromString(strategy));
@@ -76,24 +76,24 @@ public class NaturalLanguageStrategyService implements StrategyService {
             }
             LOGGER.warn("Strategy does not support your version of RoboZonky. Please upgrade.");
         } catch (final Exception ex) {
-            NaturalLanguageStrategyService.LOGGER.debug("Failed parsing strategy, may try others. Reason: {}.",
-                                                        ex.getMessage());
+            LOGGER.trace("Failed parsing strategy.", ex);
+            LOGGER.debug("Failed parsing strategy, may still try using other formats. Reason: {}.", ex.getMessage());
         }
         return Optional.empty();
     }
 
     @Override
     public Optional<InvestmentStrategy> toInvest(final String strategy) {
-        return getStrategy(strategy, (s) -> s.isInvestingEnabled() ? new NaturalLanguageInvestmentStrategy(s) : null);
+        return getStrategy(strategy, s -> s.isInvestingEnabled() ? new NaturalLanguageInvestmentStrategy(s) : null);
     }
 
     @Override
     public Optional<SellStrategy> toSell(final String strategy) {
-        return getStrategy(strategy, (s) -> s.isSellingEnabled() ? new NaturalLanguageSellStrategy(s) : null);
+        return getStrategy(strategy, s -> s.isSellingEnabled() ? new NaturalLanguageSellStrategy(s) : null);
     }
 
     @Override
     public Optional<PurchaseStrategy> toPurchase(final String strategy) {
-        return getStrategy(strategy, (s) -> s.isPurchasingEnabled() ? new NaturalLanguagePurchaseStrategy(s) : null);
+        return getStrategy(strategy, s -> s.isPurchasingEnabled() ? new NaturalLanguagePurchaseStrategy(s) : null);
     }
 }

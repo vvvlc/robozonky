@@ -32,13 +32,16 @@ import com.github.robozonky.api.remote.enums.MainIncomeType;
 import com.github.robozonky.api.remote.enums.Purpose;
 import com.github.robozonky.api.remote.enums.Rating;
 import com.github.robozonky.api.remote.enums.Region;
-import com.github.robozonky.internal.api.ToStringBuilder;
+import com.github.robozonky.internal.util.LazyInitialized;
+import com.github.robozonky.internal.util.ToStringBuilder;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 @SuppressWarnings("unchecked")
 abstract class AbstractMutableLoanImpl<T extends MutableMarketplaceLoan<T>> implements MutableMarketplaceLoan<T> {
 
     private static final Random RANDOM = new Random(0);
-
+    private final Logger LOGGER = LoggerFactory.getLogger(getClass());
     private boolean topped, covered, published, questionsAllowed, insuranceActive;
     private int id, termInMonths, investmentsCount, questionsCount, userId, activeLoansCount, amount,
             remainingInvestment;
@@ -52,19 +55,21 @@ abstract class AbstractMutableLoanImpl<T extends MutableMarketplaceLoan<T>> impl
     private URL url;
     private MyInvestment myInvestment;
     private Collection<InsurancePolicyPeriod> insuranceHistory = Collections.emptyList();
+    private final LazyInitialized<String> toString = ToStringBuilder.createFor(this, "toString");
 
     AbstractMutableLoanImpl() {
         this.id = RANDOM.nextInt(Integer.MAX_VALUE); // simplifies tests which do not need to IDs themselves
     }
 
     AbstractMutableLoanImpl(final RawLoan original) {
+        LOGGER.trace("Sanitizing loan #{}.", original.getId());
         this.activeLoansCount = original.getActiveLoansCount();
         this.amount = (int) original.getAmount();
         this.datePublished = original.getDatePublished();
         this.deadline = original.getDeadline();
         this.id = original.getId();
         this.covered = original.isCovered();
-        this.interestRate = Util.cacheBigDecimal(original.getInterestRate()); // there's only a handful of these
+        this.interestRate = original.getInterestRate();
         this.investmentsCount = original.getInvestmentsCount();
         this.investmentRate = original.getInvestmentRate();
         this.insuranceActive = original.isInsuranceActive();
@@ -387,6 +392,6 @@ abstract class AbstractMutableLoanImpl<T extends MutableMarketplaceLoan<T>> impl
 
     @Override
     public final String toString() {
-        return new ToStringBuilder(this).toString();
+        return toString.get();
     }
 }

@@ -1,5 +1,5 @@
 /*
- * Copyright 2017 The RoboZonky Project
+ * Copyright 2018 The RoboZonky Project
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -30,6 +30,8 @@ import com.github.robozonky.api.notifications.EventListener;
 import com.github.robozonky.api.notifications.Financial;
 import com.github.robozonky.api.notifications.InvestmentBased;
 import com.github.robozonky.api.notifications.LoanBased;
+import com.github.robozonky.api.notifications.MarketplaceInvestmentBased;
+import com.github.robozonky.api.notifications.MarketplaceLoanBased;
 import com.github.robozonky.api.remote.enums.Rating;
 import com.github.robozonky.api.strategies.PortfolioOverview;
 import com.github.robozonky.internal.api.Defaults;
@@ -48,7 +50,6 @@ abstract class AbstractListener<T extends Event> implements EventListener<T> {
 
     protected final Logger LOGGER = LoggerFactory.getLogger(this.getClass());
     final BalanceTracker balanceTracker;
-    final DelinquencyTracker delinquencyTracker;
     private final AbstractTargetHandler handler;
     private final SupportedListener listener;
 
@@ -56,7 +57,6 @@ abstract class AbstractListener<T extends Event> implements EventListener<T> {
         this.listener = listener;
         this.handler = handler;
         this.balanceTracker = new BalanceTracker(handler.getTarget());
-        this.delinquencyTracker = new DelinquencyTracker(handler.getTarget());
     }
 
     /**
@@ -87,6 +87,14 @@ abstract class AbstractListener<T extends Event> implements EventListener<T> {
                 return Util.getLoanData(e.getInvestment(), e.getLoan());
             } else {
                 final LoanBased e = (LoanBased) event;
+                return Util.getLoanData(e.getLoan());
+            }
+        } else if (event instanceof MarketplaceLoanBased) {
+            if (event instanceof MarketplaceInvestmentBased) {
+                final MarketplaceInvestmentBased e = (MarketplaceInvestmentBased) event;
+                return Util.getLoanData(e.getInvestment(), e.getLoan());
+            } else {
+                final MarketplaceLoanBased e = (MarketplaceLoanBased) event;
                 return Util.getLoanData(e.getLoan());
             }
         }
@@ -131,8 +139,7 @@ abstract class AbstractListener<T extends Event> implements EventListener<T> {
 
             @Override
             public Map<String, Object> getData() {
-                final Map<String, Object> data =
-                        new HashMap<>(AbstractListener.this.getData(event, sessionInfo));
+                final Map<String, Object> data = new HashMap<>(AbstractListener.this.getData(event, sessionInfo));
                 data.put("subject", getSubject());
                 return Collections.unmodifiableMap(data);
             }
@@ -156,7 +163,7 @@ abstract class AbstractListener<T extends Event> implements EventListener<T> {
     }
 
     @Override
-    final public void handle(final T event, final SessionInfo sessionInfo) {
+    public final void handle(final T event, final SessionInfo sessionInfo) {
         try {
             if (!this.shouldNotify(event, sessionInfo)) {
                 LOGGER.debug("Will not notify.");
@@ -172,6 +179,8 @@ abstract class AbstractListener<T extends Event> implements EventListener<T> {
                 finish(event, sessionInfo);
             } catch (final Exception ex) {
                 LOGGER.trace("Finisher failed.", ex);
+            } finally {
+                LOGGER.debug("Notified {}.", event);
             }
         }
     }

@@ -164,7 +164,7 @@ class ZonkyTest {
             softly.assertThat(z.getInvestment(1)).isEmpty();
             softly.assertThat(z.getAvailableParticipations(Select.unrestricted())).isEmpty();
             softly.assertThat(z.getTransactions(Select.unrestricted())).isEmpty();
-            softly.assertThat(z.getDevelopments(Loan.custom().build())).isEmpty();
+            softly.assertThat(z.getDevelopments(1)).isEmpty();
         });
     }
 
@@ -221,7 +221,7 @@ class ZonkyTest {
         final Zonky z = mockZonkyControl(ca);
         final Participation p = mock(Participation.class);
         when(p.getRemainingPrincipal()).thenReturn(BigDecimal.TEN);
-        when(p.getId()).thenReturn(1);
+        when(p.getId()).thenReturn(1L);
         z.purchase(p);
         verify(control).purchase(eq(p.getId()), any());
     }
@@ -258,7 +258,7 @@ class ZonkyTest {
                 new Transaction(i, BigDecimal.ZERO, TransactionCategory.PAYMENT, TransactionOrientation.IN);
         final PaginatedApi<Transaction, TransactionApi> ta = mockApi(Arrays.asList(irrelevant1, relevant, irrelevant2));
         final Zonky z = mockZonky(pa, ta);
-        final Optional<Investment> result = z.getInvestment(loan);
+        final Optional<Investment> result = z.getInvestmentByLoanId(loan.getId());
         assertThat(result).isPresent();
         final Investment actual = result.get();
         final LocalDate investmentDate = actual.getInvestmentDate().toLocalDate();
@@ -271,7 +271,7 @@ class ZonkyTest {
         final Api<ControlApi> ca = mockApi(control);
         final Zonky z = mockZonkyControl(ca);
         final Investment i = mock(Investment.class);
-        when(i.getId()).thenReturn(1);
+        when(i.getId()).thenReturn(1L);
         z.cancel(i);
         verify(control).cancel(eq(i.getId()));
     }

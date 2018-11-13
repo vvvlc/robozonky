@@ -17,6 +17,7 @@
 package com.github.robozonky.cli;
 
 import java.net.URL;
+import java.time.OffsetDateTime;
 import java.util.Collection;
 import java.util.Comparator;
 import java.util.List;
@@ -57,7 +58,7 @@ public final class Checker {
              * find a loan that is likely to stay on the marketplace for so long that the notification will
              * successfully come through.
              */
-            return loans.stream().sorted(Checker.COMPARATOR).findFirst();
+            return loans.stream().min(Checker.COMPARATOR);
         } catch (final Exception t) {
             Checker.LOGGER.warn("Failed obtaining a loan.", t);
             return Optional.empty();
@@ -96,7 +97,7 @@ public final class Checker {
             return false;
         } else {
             final SessionInfo sessionInfo = new SessionInfo(username);
-            final RoboZonkyTestingEvent evt = new RoboZonkyTestingEvent();
+            final RoboZonkyTestingEvent evt = OffsetDateTime::now;
             listeners.forEach(l -> l.handle(evt, sessionInfo));
             return true;
         }

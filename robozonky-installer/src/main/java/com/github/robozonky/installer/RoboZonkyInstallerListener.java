@@ -20,6 +20,7 @@ import java.io.File;
 import java.io.IOException;
 import java.net.MalformedURLException;
 import java.net.URL;
+import java.nio.file.Files;
 import java.util.List;
 import java.util.Objects;
 import java.util.Properties;
@@ -38,32 +39,41 @@ import com.izforge.izpack.api.data.InstallData;
 import com.izforge.izpack.api.data.Pack;
 import com.izforge.izpack.api.event.AbstractInstallerListener;
 import com.izforge.izpack.api.event.ProgressListener;
+import org.apache.commons.io.FileUtils;
 import org.apache.commons.lang3.SystemUtils;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
+import static com.github.robozonky.integrations.stonky.Properties.GOOGLE_CALLBACK_HOST;
+import static com.github.robozonky.integrations.stonky.Properties.GOOGLE_CALLBACK_PORT;
+import static com.github.robozonky.integrations.stonky.Properties.GOOGLE_LOCAL_FOLDER;
+
 public final class RoboZonkyInstallerListener extends AbstractInstallerListener {
 
-    final static char[] KEYSTORE_PASSWORD = UUID.randomUUID().toString().toCharArray();
+    static final char[] KEYSTORE_PASSWORD = UUID.randomUUID().toString().toCharArray();
     private static final Logger LOGGER = LoggerFactory.getLogger(RoboZonkyInstallerListener.class);
     static File INSTALL_PATH, DIST_PATH, KEYSTORE_FILE, JMX_PROPERTIES_FILE, EMAIL_CONFIG_FILE, SETTINGS_FILE,
             CLI_CONFIG_FILE, LOGBACK_CONFIG_FILE;
     private static InstallData DATA;
-    private OS operatingSystem = OS.OTHER;
+    private RoboZonkyInstallerListener.OS operatingSystem = RoboZonkyInstallerListener.OS.OTHER;
 
     public RoboZonkyInstallerListener() {
         if (SystemUtils.IS_OS_LINUX) {
-            operatingSystem = OS.LINUX;
+            operatingSystem = RoboZonkyInstallerListener.OS.LINUX;
         } else if (SystemUtils.IS_OS_WINDOWS) {
-            operatingSystem = OS.WINDOWS;
+            operatingSystem = RoboZonkyInstallerListener.OS.WINDOWS;
         }
+    }
+
+    RoboZonkyInstallerListener.OS getOperatingSystem() {
+        return operatingSystem;
     }
 
     /**
      * Testing OS-specific behavior was proving very difficult, this constructor takes all of that pain away.
      * @param os Fake operating system used for testing.
      */
-    RoboZonkyInstallerListener(final OS os) {
+    RoboZonkyInstallerListener(final RoboZonkyInstallerListener.OS os) {
         operatingSystem = os;
     }
 
@@ -100,9 +110,10 @@ public final class RoboZonkyInstallerListener extends AbstractInstallerListener 
         LOGBACK_CONFIG_FILE = null;
     }
 
-    private static void primeKeyStore(final char... keystorePassword) throws SetupFailedException {
+    private static void primeKeyStore(final char... keystorePassword) throws SetupFailedException, IOException {
         final String username = Variables.ZONKY_USERNAME.getValue(DATA);
         final char[] password = Variables.ZONKY_PASSWORD.getValue(DATA).toCharArray();
+        Files.deleteIfExists(KEYSTORE_FILE.toPath()); // re-install into the same directory otherwise fails
         final Feature f = new ZonkyPasswordFeature(KEYSTORE_FILE, keystorePassword, username, password);
         f.setup();
     }
@@ -113,7 +124,7 @@ public final class RoboZonkyInstallerListener extends AbstractInstallerListener 
         f.setup();
     }
 
-    private static CommandLinePart prepareCore(final char... keystorePassword) throws SetupFailedException {
+    private static CommandLinePart prepareCore(final char... keystorePassword) throws SetupFailedException, IOException {
         final String zonkoidId = "zonkoid";
         final CommandLinePart cli = new CommandLinePart()
                 .setOption("-p", String.valueOf(keystorePassword));
@@ -122,7 +133,7 @@ public final class RoboZonkyInstallerListener extends AbstractInstallerListener 
             cli.setOption("-d");
         }
         primeKeyStore(keystorePassword);
-        final boolean isZonkoidEnabled = Boolean.valueOf(Variables.IS_ZONKOID_ENABLED.getValue(DATA));
+        final boolean isZonkoidEnabled = Boolean.parseBoolean(Variables.IS_ZONKOID_ENABLED.getValue(DATA));
         if (isZonkoidEnabled) {
             prepareZonkoid(keystorePassword);
             cli.setOption("-x", zonkoidId);
@@ -158,21 +169,37 @@ public final class RoboZonkyInstallerListener extends AbstractInstallerListener 
         }
     }
 
+    private static URL getEmailConfiguration() throws IOException {
+        final String type = Variables.EMAIL_CONFIGURATION_TYPE.getValue(DATA);
+        LOGGER.debug("Configuring notifications: {}", type);
+        switch (type) {
+            case "file":
+                final File f = new File(Variables.EMAIL_CONFIGURATION_SOURCE.getValue(DATA));
+                Util.copyFile(f, EMAIL_CONFIG_FILE);
+                return EMAIL_CONFIG_FILE.toURI().toURL();
+            case "url":
+                return new URL(Variables.EMAIL_CONFIGURATION_SOURCE.getValue(DATA));
+            default:
+                final Properties props = Util.configureEmailNotifications(DATA);
+                Util.writeOutProperties(props, EMAIL_CONFIG_FILE);
+                return EMAIL_CONFIG_FILE.toURI().toURL();
+        }
+    }
+
     static CommandLinePart prepareEmailConfiguration() {
         if (!Boolean.valueOf(Variables.IS_EMAIL_ENABLED.getValue(DATA))) {
             return new CommandLinePart();
         }
-        final Properties p = Util.configureEmailNotifications(DATA);
         try {
-            Util.writeOutProperties(p, EMAIL_CONFIG_FILE);
-            return new CommandLinePart().setOption("-i", EMAIL_CONFIG_FILE.toURI().toURL().toExternalForm());
+            final URL url = getEmailConfiguration();
+            return new CommandLinePart().setOption("-i", url.toExternalForm());
         } catch (final Exception ex) {
             throw new IllegalStateException("Failed writing e-mail configuration.", ex);
         }
     }
 
     static CommandLinePart prepareJmx() {
-        final boolean isJmxEnabled = Boolean.valueOf(Variables.IS_JMX_ENABLED.getValue(DATA));
+        final boolean isJmxEnabled = Boolean.parseBoolean(Variables.IS_JMX_ENABLED.getValue(DATA));
         final CommandLinePart clp = new CommandLinePart()
                 .setProperty("com.sun.management.jmxremote", isJmxEnabled ? "true" : "false")
                 // the buffer is effectively a memory leak; we'll reduce its size from 1000 to 10
@@ -198,7 +225,7 @@ public final class RoboZonkyInstallerListener extends AbstractInstallerListener 
                 .setProperty("java.rmi.server.hostname", Variables.JMX_HOSTNAME.getValue(DATA));
     }
 
-    static CommandLinePart prepareCore() throws SetupFailedException {
+    static CommandLinePart prepareCore() throws SetupFailedException, IOException {
         return prepareCore(KEYSTORE_PASSWORD);
     }
 
@@ -215,18 +242,7 @@ public final class RoboZonkyInstallerListener extends AbstractInstallerListener 
                     .setEnvironmentVariable("JAVA_HOME", "");
             // now proceed to set all system properties and settings
             final Properties settings = new Properties();
-            Stream.of(strategy, stonky, jmxConfig, credentials, logging)
-                    .map(CommandLinePart::getProperties)
-                    .flatMap(p -> p.entrySet().stream())
-                    .forEach(e -> {
-                        final String key = e.getKey();
-                        final String value = e.getValue();
-                        if (key.startsWith("robozonky")) { // RoboZonky setting to be written to separate file
-                            settings.setProperty(key, value);
-                        } else { // general Java system property to end up on the command line
-                            commandLine.setProperty(key, value);
-                        }
-                    });
+            Util.processCommandLine(commandLine, settings, strategy, stonky, jmxConfig, credentials, logging);
             // write settings to a file
             Util.writeOutProperties(settings, SETTINGS_FILE);
             return commandLine;
@@ -239,25 +255,6 @@ public final class RoboZonkyInstallerListener extends AbstractInstallerListener 
         for (final ServiceGenerator serviceGenerator : ServiceGenerator.values()) {
             final File result = serviceGenerator.apply(runScript);
             LOGGER.info("Generated {} as a {} service.", result, serviceGenerator);
-        }
-    }
-
-    private void prepareRunScript(final CommandLinePart commandLine) {
-        if (System.getProperty("java.version").startsWith("1.8")) { // use G1GC on Java 8
-            commandLine.setJvmArgument("XX:+UseG1GC");
-        }
-        commandLine.setJvmArgument("Xmx32m");
-        final RunScriptGenerator generator = operatingSystem == OS.WINDOWS ?
-                RunScriptGenerator.forWindows(DIST_PATH, CLI_CONFIG_FILE)
-                : RunScriptGenerator.forUnix(DIST_PATH, CLI_CONFIG_FILE);
-        final File runScript = generator.apply(commandLine);
-        final File distRunScript = generator.getChildRunScript();
-        Stream.of(runScript, distRunScript).forEach(script -> {
-            final boolean success = script.setExecutable(true);
-            LOGGER.info("Made '{}' executable: {}.", script, success);
-        });
-        if (operatingSystem == OS.LINUX) {
-            prepareLinuxServices(runScript);
         }
     }
 
@@ -275,19 +272,52 @@ public final class RoboZonkyInstallerListener extends AbstractInstallerListener 
         try {
             final String host = Variables.GOOGLE_CALLBACK_HOST.getValue(DATA);
             final String port = Variables.GOOGLE_CALLBACK_PORT.getValue(DATA);
+            final CommandLinePart cli = new CommandLinePart();
             if (Boolean.valueOf(Variables.IS_STONKY_ENABLED.getValue(DATA))) {
+                cli.setProperty(GOOGLE_CALLBACK_HOST.getKey(), host);
+                cli.setProperty(GOOGLE_CALLBACK_PORT.getKey(), port);
                 // reuse the same code for this as we do in CLI
-                final GoogleCredentialsFeature google = new GoogleCredentialsFeature();
+                LOGGER.debug("Preparing Google credentials.");
+                final String username = Variables.ZONKY_USERNAME.getValue(DATA);
+                final GoogleCredentialsFeature google = new GoogleCredentialsFeature(username);
                 google.setHost(host);
                 google.setPort(Integer.parseInt(port));
                 google.runGoogleCredentialCheck();
+                LOGGER.debug("Credential check over.");
+                // copy credentials to the correct directory
+                final String dirName = GOOGLE_LOCAL_FOLDER.getValue()
+                        .orElseThrow(() -> new IllegalStateException("Not possible."));
+                final File source = new File(dirName);
+                if (!source.isDirectory()) {
+                    throw new IllegalStateException("Google credentials folder was not created.");
+                }
+                final File target = new File(INSTALL_PATH, dirName);
+                LOGGER.debug("Will copy {} to {}.", source, target);
+                FileUtils.copyDirectory(source, target);
+                FileUtils.deleteDirectory(source);
             }
-            final CommandLinePart cli = new CommandLinePart();
-            cli.setProperty(com.github.robozonky.integrations.stonky.Properties.GOOGLE_CALLBACK_HOST.getKey(), host);
-            cli.setProperty(com.github.robozonky.integrations.stonky.Properties.GOOGLE_CALLBACK_PORT.getKey(), port);
             return cli;
         } catch (final Exception ex) {
             throw new IllegalStateException("Failed configuring Google account.", ex);
+        }
+    }
+
+    private void prepareRunScript(final CommandLinePart commandLine) {
+        if (System.getProperty("java.version").startsWith("1.8")) { // use G1GC on Java 8
+            commandLine.setJvmArgument("XX:+UseG1GC");
+        }
+        commandLine.setJvmArgument("Xmx32m");
+        final RunScriptGenerator generator = operatingSystem == RoboZonkyInstallerListener.OS.WINDOWS ?
+                RunScriptGenerator.forWindows(DIST_PATH, CLI_CONFIG_FILE)
+                : RunScriptGenerator.forUnix(DIST_PATH, CLI_CONFIG_FILE);
+        final File runScript = generator.apply(commandLine);
+        final File distRunScript = generator.getChildRunScript();
+        Stream.of(runScript, distRunScript).forEach(script -> {
+            final boolean success = script.setExecutable(true);
+            LOGGER.info("Made '{}' executable: {}.", script, success);
+        });
+        if (operatingSystem == RoboZonkyInstallerListener.OS.LINUX) {
+            prepareLinuxServices(runScript);
         }
     }
 

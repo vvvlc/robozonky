@@ -1,5 +1,5 @@
 /*
- * Copyright 2017 The RoboZonky Project
+ * Copyright 2018 The RoboZonky Project
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -20,8 +20,11 @@ import java.io.File;
 import java.io.IOException;
 import java.security.KeyStoreException;
 import java.util.Optional;
+import java.util.UUID;
 
 import com.github.robozonky.api.SessionInfo;
+import com.github.robozonky.app.App;
+import com.github.robozonky.app.ReturnCode;
 import com.github.robozonky.common.extensions.ListenerServiceLoader;
 import com.github.robozonky.common.secrets.KeyStoreHandler;
 import com.github.robozonky.common.secrets.SecretProvider;
@@ -29,15 +32,18 @@ import com.github.robozonky.test.AbstractRoboZonkyTest;
 import org.junit.jupiter.api.Test;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.mockito.ArgumentMatchers.anyInt;
+import static org.mockito.ArgumentMatchers.eq;
+import static org.mockito.Mockito.doNothing;
+import static org.mockito.Mockito.spy;
+import static org.mockito.Mockito.verify;
 
 class CommandLineTest extends AbstractRoboZonkyTest {
 
-    @Test
-    void properScriptIdentification() {
-        System.setProperty("os.name", "Some Windows System");
-        assertThat(CommandLine.getScriptIdentifier()).isEqualTo("robozonky.bat");
-        System.setProperty("os.name", "Any Other System");
-        assertThat(CommandLine.getScriptIdentifier()).isEqualTo("robozonky.sh");
+    private static App mockedApp(final String... args) {
+        final App main = spy(new App(args));
+        doNothing().when(main).actuallyExit(anyInt());
+        return main;
     }
 
     @Test
@@ -50,25 +56,33 @@ class CommandLineTest extends AbstractRoboZonkyTest {
         final String username = "someone@somewhere.cz";
         SecretProvider.keyStoreBased(ksh, username, "something".toCharArray());
         // run the app
-        final Optional<InvestmentMode> cfg = CommandLine.parse((t) -> {
-                                                               }, "-g", keystore.getAbsolutePath(), "-p",
-                                                               keyStorePassword, "-i", "somewhere.txt", "-s",
-                                                               "somewhere");
+        final String name = UUID.randomUUID().toString();
+        final App main = new App("-n", name, "-g", keystore.getAbsolutePath(), "-p", keyStorePassword, "-i", "somewhere.txt",
+                                 "-s", "somewhere");
+        final Optional<InvestmentMode> cfg = CommandLine.parse(main);
         assertThat(cfg).isPresent();
+        assertThat(cfg.get().getSessionName()).isEqualTo(name);
         assertThat(ListenerServiceLoader.getNotificationConfiguration(new SessionInfo(username))).isNotEmpty();
     }
 
     @Test
+    void validDaemonCliNoKeystore() {
+        final App main = mockedApp("-g", "a", "-p", "p", "-i", "somewhere.txt", "-s", "somewhere");
+        final Optional<InvestmentMode> cfg = CommandLine.parse(main);
+        assertThat(cfg).isEmpty();
+    }
+
+    @Test
     void helpCli() {
-        final Optional<InvestmentMode> cfg = CommandLine.parse((t) -> {
-        }, "-h");
-        assertThat(cfg).isEmpty(); // would have called System.exit(), but we prevented that
+        final App main = mockedApp("-h");
+        main.run();
+        verify(main).actuallyExit(eq(ReturnCode.ERROR_SETUP.getCode()));
     }
 
     @Test
     void invalidCli() {
-        final Optional<InvestmentMode> cfg = CommandLine.parse((t) -> {
-        });
-        assertThat(cfg).isEmpty(); // would have called System.exit(), but we prevented that
+        final App main = mockedApp();
+        main.run();
+        verify(main).actuallyExit(eq(ReturnCode.ERROR_SETUP.getCode()));
     }
 }

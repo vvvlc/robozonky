@@ -1,5 +1,5 @@
 /*
- * Copyright 2017 The RoboZonky Project
+ * Copyright 2018 The RoboZonky Project
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -17,7 +17,6 @@
 package com.github.robozonky.util;
 
 import java.io.File;
-import java.io.IOException;
 import java.net.MalformedURLException;
 import java.net.URL;
 import java.nio.file.Files;
@@ -31,7 +30,7 @@ import java.util.stream.Stream;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
-public class FileUtil {
+public final class FileUtil {
 
     private static final Logger LOGGER = LoggerFactory.getLogger(FileUtil.class);
 
@@ -40,13 +39,12 @@ public class FileUtil {
     }
 
     public static Optional<File> findFolder(final String folderName) {
-        try {
-            return Files.walk(new File(System.getProperty("user.dir")).toPath())
-                    .map(Path::toFile)
-                    .filter(File::isDirectory)
+        final Path root = new File(System.getProperty("user.dir")).toPath();
+        try (final Stream<Path> s = Files.find(root, 1, (path, attr) -> attr.isDirectory())) {
+            return s.map(Path::toFile)
                     .filter(f -> Objects.equals(f.getName(), folderName))
                     .findFirst();
-        } catch (final IOException ex) {
+        } catch (final Exception ex) {
             FileUtil.LOGGER.warn("Exception while walking file tree.", ex);
             return Optional.empty();
         }

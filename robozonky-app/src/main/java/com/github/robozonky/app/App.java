@@ -1,5 +1,5 @@
 /*
- * Copyright 2017 The RoboZonky Project
+ * Copyright 2018 The RoboZonky Project
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -17,38 +17,54 @@
 package com.github.robozonky.app;
 
 import java.nio.charset.Charset;
-import java.time.Duration;
 import java.util.Locale;
 import java.util.Optional;
 
-import com.github.robozonky.api.SessionInfo;
-import com.github.robozonky.api.notifications.RoboZonkyStartingEvent;
 import com.github.robozonky.app.configuration.CommandLine;
 import com.github.robozonky.app.configuration.InvestmentMode;
+import com.github.robozonky.app.events.EventFactory;
+import com.github.robozonky.app.events.Events;
 import com.github.robozonky.app.management.Management;
 import com.github.robozonky.app.runtime.Lifecycle;
-import com.github.robozonky.app.version.UpdateMonitor;
+import com.github.robozonky.util.IoUtil;
 import com.github.robozonky.util.Scheduler;
-import com.github.robozonky.util.SystemExitService;
-import com.github.robozonky.util.SystemExitServiceLoader;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 /**
  * You are required to exit this app by calling {@link #exit(ReturnCode)}.
  */
-public class App {
+public class App implements Runnable {
 
-    private static final ShutdownHook SHUTDOWN_HOOKS = new ShutdownHook();
     private static final Logger LOGGER = LoggerFactory.getLogger(App.class);
-    private static final Lifecycle LIFECYCLE = new Lifecycle();
 
-    private static void exit(final ReturnCode returnCode) {
-        App.LOGGER.trace("Exit requested with return code {}.", returnCode);
-        final ShutdownHook.Result r = LIFECYCLE.getTerminationCause()
+    private final ShutdownHook shutdownHooks = new ShutdownHook();
+    private final Lifecycle lifecycle = new Lifecycle(shutdownHooks);
+    private final String[] args;
+
+    public App(final String... args) {
+        this.args = args.clone();
+    }
+
+    public static void main(final String... args) {
+        final App main = new App(args);
+        main.run();
+    }
+
+    private void exit(final ReturnCode returnCode) {
+        LOGGER.trace("Exit requested with return code {}.", returnCode);
+        final ShutdownHook.Result r = lifecycle.getTerminationCause()
                 .map(t -> new ShutdownHook.Result(ReturnCode.ERROR_UNEXPECTED, t))
                 .orElse(new ShutdownHook.Result(returnCode, null));
-        App.exit(r);
+        exit(r);
+    }
+
+    /**
+     * Exists so that tests can mock the {@link System#exit(int)} away.
+     * @param code
+     */
+    public void actuallyExit(final int code) {
+        System.exit(code);
     }
 
     /**
@@ -56,47 +72,51 @@ public class App {
      * so may result in unpredictable behavior of this instance of RoboZonky or future ones.
      * @param result Will be passed to {@link System#exit(int)}.
      */
-    public static void exit(final ShutdownHook.Result result) {
-        App.SHUTDOWN_HOOKS.execute(result);
-        final SystemExitService exit = SystemExitServiceLoader.load();
-        LOGGER.trace("System exit service received: {}.", exit);
-        exit.newSystemExit().call(result.getReturnCode().getCode());
+    public void exit(final ShutdownHook.Result result) {
+        shutdownHooks.execute(result);
+        actuallyExit(result.getReturnCode().getCode());
     }
 
-    private static ReturnCode execute(final InvestmentMode mode) {
-        App.SHUTDOWN_HOOKS.register(() -> Optional.of((r) -> Scheduler.inBackground().close()));
-        Events.fire(new RoboZonkyStartingEvent());
+    ReturnCode execute(final InvestmentMode mode) {
         try {
-            ensureLiveness();
-            Scheduler.inBackground().submit(new UpdateMonitor(), Duration.ofDays(1));
-            App.SHUTDOWN_HOOKS.register(new Management(LIFECYCLE));
-            final String sessionName = Events.getSessionInfo().flatMap(SessionInfo::getName).orElse(null);
-            App.SHUTDOWN_HOOKS.register(new RoboZonkyStartupNotifier(sessionName));
-            return mode.apply(LIFECYCLE);
+            return IoUtil.tryFunction(() -> mode, this::executeSafe);
         } catch (final Throwable t) {
             LOGGER.error("Caught unexpected exception, terminating daemon.", t);
             return ReturnCode.ERROR_UNEXPECTED;
         }
     }
 
-    private static void ensureLiveness() {
-        App.LIFECYCLE.getShutdownHooks().forEach(App.SHUTDOWN_HOOKS::register);
-        if (!App.LIFECYCLE.waitUntilOnline()) {
-            App.exit(ReturnCode.ERROR_DOWN);
+    private ReturnCode executeSafe(final InvestmentMode m) {
+        shutdownHooks.register(() -> Optional.of(r -> Scheduler.inBackground().close()));
+        Events.allSessions().fire(EventFactory.roboZonkyStarting());
+        ensureLiveness();
+        shutdownHooks.register(new Management(lifecycle));
+        shutdownHooks.register(new RoboZonkyStartupNotifier(m.getSessionName()));
+        return m.apply(lifecycle);
+    }
+
+    public void resumeToFail(final Throwable throwable) {
+        lifecycle.resumeToFail(throwable);
+    }
+
+    void ensureLiveness() {
+        if (!lifecycle.waitUntilOnline()) {
+            exit(ReturnCode.ERROR_DOWN);
         }
     }
 
-    public static void main(final String... args) {
-        App.LOGGER.debug("Current working directory is '{}'.", System.getProperty("user.dir"));
-        App.LOGGER.debug("Running {} {} v{} on {} v{} ({}, {} CPUs, {}, {}).", System.getProperty("java.vm.vendor"),
-                         System.getProperty("java.vm.name"), System.getProperty("java.vm.version"),
-                         System.getProperty("os.name"), System.getProperty("os.version"), System.getProperty("os.arch"),
-                         Runtime.getRuntime().availableProcessors(), Locale.getDefault(), Charset.defaultCharset());
-        final ReturnCode code = configure(args).map(App::execute).orElse(ReturnCode.ERROR_SETUP);
-        App.exit(code); // call the core code
+    public String[] getArgs() {
+        return args.clone();
     }
 
-    private static Optional<InvestmentMode> configure(final String... args) {
-        return CommandLine.parse(LIFECYCLE::resumeToFail, args);
+    @Override
+    public void run() {
+        LOGGER.debug("Current working directory is '{}'.", System.getProperty("user.dir"));
+        LOGGER.debug("Running {} {} v{} on {} v{} ({}, {} CPUs, {}, {}).", System.getProperty("java.vm.vendor"),
+                     System.getProperty("java.vm.name"), System.getProperty("java.vm.version"),
+                     System.getProperty("os.name"), System.getProperty("os.version"), System.getProperty("os.arch"),
+                     Runtime.getRuntime().availableProcessors(), Locale.getDefault(), Charset.defaultCharset());
+        final ReturnCode code = CommandLine.parse(this).map(this::execute).orElse(ReturnCode.ERROR_SETUP);
+        exit(code); // call the core code
     }
 }

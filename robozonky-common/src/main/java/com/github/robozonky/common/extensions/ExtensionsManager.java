@@ -22,8 +22,8 @@ import java.net.URLClassLoader;
 import java.util.Collection;
 import java.util.ServiceLoader;
 
+import com.github.robozonky.internal.util.LazyInitialized;
 import com.github.robozonky.util.FileUtil;
-import com.github.robozonky.util.LazyInitialized;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -43,7 +43,7 @@ enum ExtensionsManager {
         this.LOGGER.debug("Using extensions folder: '{}'.", extensionsFolder.getAbsolutePath());
         final Collection<URL> urls =
                 FileUtil.filesToUrls(extensionsFolder.listFiles(f -> f.getPath().toLowerCase().endsWith(".jar")));
-        return new URLClassLoader(urls.toArray(new URL[urls.size()]));
+        return new URLClassLoader(urls.toArray(new URL[0]));
     }
 
     ClassLoader retrieveExtensionClassLoader(final String folderName) {

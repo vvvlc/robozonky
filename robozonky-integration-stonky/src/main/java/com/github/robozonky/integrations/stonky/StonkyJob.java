@@ -19,24 +19,32 @@ package com.github.robozonky.integrations.stonky;
 import java.time.Duration;
 import java.time.LocalDate;
 import java.time.ZonedDateTime;
-import java.util.Random;
+import java.util.function.Consumer;
 
-import com.github.robozonky.common.jobs.Job;
-import com.github.robozonky.common.jobs.Payload;
-import com.github.robozonky.common.secrets.SecretProvider;
+import com.github.robozonky.common.Tenant;
+import com.github.robozonky.common.jobs.TenantJob;
+import com.github.robozonky.common.jobs.TenantPayload;
 import com.github.robozonky.internal.api.Defaults;
 
-enum StonkyJob implements Job {
+final class StonkyJob implements TenantJob {
 
-    INSTANCE;
+    private final Consumer<Tenant> stonky;
 
-    private final Random random = new Random();
+    public StonkyJob() {
+        this(arg -> new Stonky().apply(arg));
+    }
 
+    StonkyJob(final Consumer<Tenant> provider) {
+        this.stonky = provider;
+    }
+
+    /**
+     * @return When added to the current time, will result in some random time shortly after midnight tomorrow.
+     */
     @Override
     public Duration startIn() {
-        final int randomSeconds = random.nextInt(1000);
-        final ZonedDateTime triggerOn =
-                LocalDate.now().plusDays(1).atStartOfDay(Defaults.ZONE_ID).plusSeconds(randomSeconds);
+        final Duration random = TenantJob.super.startIn();
+        final ZonedDateTime triggerOn = LocalDate.now().plusDays(1).atStartOfDay(Defaults.ZONE_ID).plus(random);
         return Duration.between(ZonedDateTime.now(), triggerOn);
     }
 
@@ -51,22 +59,15 @@ enum StonkyJob implements Job {
     }
 
     @Override
-    public Payload payload() {
+    public TenantPayload payload() {
         return new StonkyPayload();
     }
 
-    private static final class StonkyPayload implements Payload {
+    private final class StonkyPayload implements TenantPayload {
 
         @Override
-        public String id() {
-            return "Stonky";
-        }
-
-        @Override
-        public void accept(final SecretProvider secretProvider) {
-            final Stonky s = new Stonky();
-            s.apply(secretProvider);
+        public void accept(final Tenant secretProvider) {
+            stonky.accept(secretProvider);
         }
     }
-
 }

@@ -19,7 +19,7 @@
   <modelVersion>4.0.0</modelVersion>
   <groupId>com.github.robozonky</groupId>
   <artifactId>robozonky</artifactId>
-  <version>4.9.0-SNAPSHOT</version>
+  <version>5.0.0-SNAPSHOT</version>
   <modules>
     <module>robozonky-api</module>
     <module>robozonky-app</module>
@@ -54,9 +54,13 @@
     <surefire.version>2.22.0</surefire.version>
     <version.org.antlr>4.7.1</version.org.antlr>
     <version.org.codehaus.izpack>5.1.3</version.org.codehaus.izpack>
-    <version.org.jboss.resteasy>3.6.1.Final</version.org.jboss.resteasy>
-    <version.org.junit>5.2.0</version.org.junit>
+    <version.org.jboss.resteasy>3.6.2.Final</version.org.jboss.resteasy>
+    <version.org.junit5>3.1</version.org.junit5>
+    <version.org.junit>5.${version.org.junit5}</version.org.junit>
+    <version.org.junit.platform>1.${version.org.junit5}</version.org.junit.platform>
     <version.org.slf4j>1.7.25</version.org.slf4j>
+    <!-- For whatever reason, SMTP auth fails in Windows with the default version. -->
+    <version.com.sun.mail>1.6.2</version.com.sun.mail>
     <!--
       Make sure tests work on Appveyor and other Windows platforms, while working together with Sonar Cloud.
       Recommended here: https://docs.sonarqube.org/display/PLUG/Usage+of+JaCoCo+with+SonarJava
@@ -135,16 +139,6 @@
         <type>pom</type>
         <scope>import</scope>
       </dependency>
-      <dependency> <!-- Java 9 doesn't export this anymore, but API comes from RESTEasy -->
-        <groupId>com.sun.xml.bind</groupId>
-        <artifactId>jaxb-impl</artifactId>
-        <version>2.3.0.1</version>
-      </dependency>
-      <dependency> <!-- Java 9 doesn't export this anymore, but API comes from RESTEasy -->
-        <groupId>com.sun.xml.bind</groupId>
-        <artifactId>jaxb-core</artifactId>
-        <version>2.3.0.1</version>
-      </dependency>
       <dependency>
         <groupId>org.apache.httpcomponents</groupId>
         <artifactId>httpclient</artifactId>
@@ -179,9 +173,19 @@
         <version>1.5</version>
       </dependency>
       <dependency>
+        <groupId>com.sun.mail</groupId>
+        <artifactId>javax.mail</artifactId>
+        <version>${version.com.sun.mail}</version>
+      </dependency>
+      <dependency>
+        <groupId>com.sun.mail</groupId>
+        <artifactId>smtp</artifactId>
+        <version>${version.com.sun.mail}</version>
+      </dependency>
+      <dependency>
         <groupId>com.icegreen</groupId>
         <artifactId>greenmail</artifactId>
-        <version>1.5.7</version>
+        <version>1.5.8</version>
         <scope>test</scope>
         <exclusions>
           <exclusion>
@@ -189,12 +193,6 @@
             <artifactId>junit</artifactId>
           </exclusion>
         </exclusions>
-      </dependency>
-      <!-- Java 9 does not open this anymore. -->
-      <dependency>
-        <groupId>javax.activation</groupId>
-        <artifactId>activation</artifactId>
-        <version>1.1.1</version>
       </dependency>
       <!-- Installer -->
       <dependency>
@@ -234,6 +232,11 @@
         <version>0.5.4</version>
       </dependency>
       <dependency>
+        <groupId>info.picocli</groupId>
+        <artifactId>picocli</artifactId>
+        <version>3.7.0</version>
+      </dependency>
+      <dependency>
         <groupId>org.apache.commons</groupId>
         <artifactId>commons-lang3</artifactId>
         <version>3.7</version>
@@ -251,9 +254,15 @@
         <scope>test</scope>
       </dependency>
       <dependency>
+        <groupId>org.junit.jupiter</groupId>
+        <artifactId>junit-jupiter-params</artifactId>
+        <version>${version.org.junit}</version>
+        <scope>test</scope>
+      </dependency>
+      <dependency>
         <groupId>org.junit.platform</groupId>
         <artifactId>junit-platform-launcher</artifactId>
-        <version>1.2.0</version>
+        <version>${version.org.junit.platform}</version>
       </dependency>
       <dependency>
         <groupId>org.mockito</groupId>
@@ -281,12 +290,6 @@
         <artifactId>jackson-coreutils</artifactId>
         <version>1.8</version>
       </dependency>
-      <dependency> <!-- Mockserver, for whatever reason, includes this in "compile" scope. We don't want that. -->
-        <groupId>com.google.guava</groupId>
-        <artifactId>guava</artifactId>
-        <version>18.0</version>
-        <scope>test</scope>
-      </dependency>
       <!-- Logging. -->
       <dependency>
         <groupId>org.slf4j</groupId>
@@ -303,6 +306,17 @@
         <artifactId>logback-classic</artifactId>
         <version>1.2.3</version>
       </dependency>
+      <!-- Address dependency hell. Otherwise the classpath test in robozonky-distribution-full fails. -->
+      <dependency>
+        <groupId>javax.xml.bind</groupId>
+        <artifactId>jaxb-api</artifactId>
+        <version>2.3.1</version>
+      </dependency>
+      <dependency>
+        <groupId>com.google.guava</groupId>
+        <artifactId>guava</artifactId>
+        <version>20.0</version>
+      </dependency>
     </dependencies>
   </dependencyManagement>
   <build>
@@ -313,6 +327,30 @@
       <plugin>
         <groupId>org.pitest</groupId>
         <artifactId>pitest-maven</artifactId>
+        <version>1.4.3</version>
+        <dependencies>
+          <dependency>
+            <groupId>org.pitest</groupId>
+            <artifactId>pitest-junit5-plugin</artifactId>
+            <version>0.7</version>
+          </dependency>
+        </dependencies>
+        <configuration>
+          <skip>${skipTests}</skip>
+          <timestampedReports>false</timestampedReports>
+          <coverageThreshold>85</coverageThreshold>
+          <mutationThreshold>85</mutationThreshold>
+          <targetClasses>
+            <param>com.github.robozonky.*</param>
+          </targetClasses>
+          <excludedMethods>
+            <param>hashCode</param>
+            <param>toString</param>
+          </excludedMethods>
+          <jvmArgs> <!-- some tests may fail on non-UTF-8 machines -->
+            <value>-Dfile.encoding=${project.build.sourceEncoding}</value>
+          </jvmArgs>
+        </configuration>
         <executions>
           <execution>
             <id>fail-on-coverage</id>
@@ -333,6 +371,19 @@
             <id>attach-javadocs</id>
             <goals>
               <goal>jar</goal>
+            </goals>
+          </execution>
+        </executions>
+      </plugin>
+      <plugin>
+        <artifactId>maven-failsafe-plugin</artifactId>
+        <executions>
+          <execution>
+            <id>run-integration-tests</id>
+            <phase>integration-test</phase>
+            <goals>
+              <goal>integration-test</goal>
+              <goal>verify</goal>
             </goals>
           </execution>
         </executions>
@@ -419,45 +470,52 @@
           <version>3.1.1</version>
         </plugin>
         <plugin>
-          <groupId>org.pitest</groupId>
-          <artifactId>pitest-maven</artifactId>
-          <version>1.4.1</version>
-          <dependencies>
-            <dependency>
-              <groupId>org.pitest</groupId>
-              <artifactId>pitest-junit5-plugin</artifactId>
-              <version>0.5</version>
-            </dependency>
-          </dependencies>
-          <configuration>
-            <skip>${skipTests}</skip>
-            <timestampedReports>false</timestampedReports>
-            <coverageThreshold>85</coverageThreshold>
-            <mutationThreshold>85</mutationThreshold>
-            <targetClasses>
-              <param>com.github.robozonky.*</param>
-            </targetClasses>
-            <excludedMethods>
-              <param>hashCode</param>
-              <param>toString</param>
-            </excludedMethods>
-            <jvmArgs> <!-- some tests may fail on non-UTF-8 machines -->
-              <value>-Dfile.encoding=${project.build.sourceEncoding}</value>
-            </jvmArgs>
-          </configuration>
-        </plugin>
-        <plugin>
           <artifactId>maven-surefire-plugin</artifactId>
           <version>${surefire.version}</version>
           <configuration>
-            <reuseForks>false</reuseForks>
             <redirectTestOutputToFile>true</redirectTestOutputToFile>
             <workingDirectory>${basedir}/target</workingDirectory>
           </configuration>
+          <dependencies> <!-- possibly remove this after https://github.com/apache/maven-surefire/pull/193 is fixed -->
+            <dependency>
+              <groupId>org.junit.platform</groupId>
+              <artifactId>junit-platform-launcher</artifactId>
+              <version>${version.org.junit.platform}</version>
+            </dependency>
+            <dependency>
+              <groupId>org.junit.platform</groupId>
+              <artifactId>junit-platform-engine</artifactId>
+              <version>${version.org.junit.platform}</version>
+            </dependency>
+          </dependencies>
+        </plugin>
+        <plugin>
+          <artifactId>maven-failsafe-plugin</artifactId>
+          <version>${surefire.version}</version>
+          <configuration>
+            <redirectTestOutputToFile>true</redirectTestOutputToFile>
+            <workingDirectory>${basedir}/target</workingDirectory>
+          </configuration>
+          <dependencies> <!-- possibly remove this after https://github.com/apache/maven-surefire/pull/193 is fixed -->
+            <dependency>
+              <groupId>org.junit.platform</groupId>
+              <artifactId>junit-platform-launcher</artifactId>
+              <version>${version.org.junit.platform}</version>
+            </dependency>
+            <dependency>
+              <groupId>org.junit.platform</groupId>
+              <artifactId>junit-platform-engine</artifactId>
+              <version>${version.org.junit.platform}</version>
+            </dependency>
+          </dependencies>
         </plugin>
         <plugin>
           <artifactId>maven-javadoc-plugin</artifactId>
           <version>3.0.0</version>
+        </plugin>
+        <plugin> <!-- 3.0.0-M1 breaks IZPack. See for similar: https://github.com/openhab/openhab-core/pull/408 -->
+          <artifactId>maven-install-plugin</artifactId>
+          <version>2.5.2</version>
         </plugin>
       </plugins>
     </pluginManagement>

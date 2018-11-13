@@ -17,17 +17,15 @@
 package com.github.robozonky.integrations.stonky;
 
 import java.io.File;
+import java.io.IOException;
 import java.io.InputStream;
 import java.net.URL;
+import java.util.Collections;
 import java.util.Optional;
 import java.util.function.Function;
 import java.util.function.Supplier;
 
-import com.github.robozonky.common.remote.ApiProvider;
-import com.github.robozonky.common.remote.ZonkyApiTokenSupplier;
-import com.github.robozonky.common.secrets.SecretProvider;
 import com.github.robozonky.internal.api.Defaults;
-import com.github.robozonky.internal.api.Settings;
 import com.github.robozonky.util.IoUtil;
 import com.github.robozonky.util.ThrowingFunction;
 import com.github.robozonky.util.ThrowingSupplier;
@@ -42,7 +40,7 @@ import org.apache.commons.io.FileUtils;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
-public class Util {
+public final class Util {
 
     static final JsonFactory JSON_FACTORY = JacksonFactory.getDefaultInstance();
     private static final Logger LOGGER = LoggerFactory.getLogger(Util.class);
@@ -50,6 +48,29 @@ public class Util {
 
     private Util() {
         // no instances
+    }
+
+    public static com.google.api.services.drive.model.File getFile(final Drive driveService,
+                                                                   final String id) throws IOException {
+        LOGGER.debug("Loading file: {}.", id);
+        return driveService.files().get(id)
+                .setFields("id,name,modifiedTime")
+                .execute();
+    }
+
+    public static com.google.api.services.drive.model.File copyFile(final Drive driveService,
+                                                                    final com.google.api.services.drive.model.File upstream,
+                                                                    final com.google.api.services.drive.model.File parent,
+                                                                    final String name) throws IOException {
+        LOGGER.debug("Cloning master spreadsheet '{}', setting name: {}.", upstream.getId(), name);
+        final com.google.api.services.drive.model.File f = new com.google.api.services.drive.model.File();
+        f.setName(name);
+        f.setParents(Collections.singletonList(parent.getId()));
+        final com.google.api.services.drive.model.File result = driveService.files().copy(upstream.getId(), f)
+                .setFields("id,name,modifiedTime")
+                .execute();
+        LOGGER.debug("Created a copy: {}.", result.getId());
+        return result;
     }
 
     public static HttpTransport createTransport() {
@@ -95,7 +116,7 @@ public class Util {
     static Optional<File> download(final URL url) {
         LOGGER.debug("Will download file from {}.", url);
         try {
-            return IoUtil.applyCloseable(url::openStream, Util::download);
+            return IoUtil.tryFunction(url::openStream, Util::download);
         } catch (final Exception ex) {
             LOGGER.warn("Failed downloading file.", ex);
             return Optional.empty();
@@ -113,7 +134,4 @@ public class Util {
         }
     }
 
-    static ZonkyApiTokenSupplier getToken(final ApiProvider api, final SecretProvider secrets, final String scope) {
-        return new ZonkyApiTokenSupplier(scope, api, secrets, Settings.INSTANCE.getTokenRefreshPeriod());
-    }
 }

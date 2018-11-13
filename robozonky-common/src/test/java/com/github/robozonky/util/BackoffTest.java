@@ -16,6 +16,7 @@
 
 package com.github.robozonky.util;
 
+import java.math.BigDecimal;
 import java.time.Duration;
 import java.util.Optional;
 
@@ -27,7 +28,7 @@ import org.mockito.junit.jupiter.MockitoExtension;
 import static java.time.Duration.ofMillis;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.junit.jupiter.api.Assertions.assertTimeout;
-import static org.mockito.Mockito.times;
+import static org.mockito.Mockito.atLeast;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
@@ -55,7 +56,7 @@ class BackoffTest {
         // make sure the operation took at least the expected duration
         assertThat(took).isGreaterThan(maxDuration);
         // make sure the operation was tried the expected number of times, the sum of n^2 for n=[0, ...)
-        verify(operation, times(11)).get();
+        verify(operation, atLeast(10)).get();
     }
 
     @Test
@@ -74,4 +75,26 @@ class BackoffTest {
         // make sure the operation took less than the max duration
         assertThat(took).isLessThan(maxDuration);
     }
+
+    @Test
+    void initialBackOffTimeCalculation() {
+        final Duration initial = Duration.ofSeconds(123);
+        final Optional<Duration> backoff = Backoff.calculateBackoffTime(null, Duration.ZERO, initial);
+        assertThat(backoff).contains(initial);
+    }
+
+    @Test
+    void continuedBackOffTimeCalculation() {
+        final Duration initial = Duration.ofSeconds(123);
+        final Optional<Duration> backoff = Backoff.calculateBackoffTime(null, Duration.ofSeconds(1), initial);
+        assertThat(backoff).contains(Duration.ofSeconds(2));
+    }
+
+    @Test
+    void noMoreBackoff() {
+        final Duration initial = Duration.ofSeconds(123);
+        final Optional<Duration> backoff = Backoff.calculateBackoffTime(BigDecimal.TEN, Duration.ofSeconds(1), initial);
+        assertThat(backoff).isEmpty();
+    }
 }
+

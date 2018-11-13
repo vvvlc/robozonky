@@ -16,20 +16,16 @@
 
 package com.github.robozonky.api.remote.entities.sanitized;
 
-import java.math.BigDecimal;
 import java.net.MalformedURLException;
 import java.net.URL;
-import java.util.HashMap;
-import java.util.Map;
 import java.util.function.Function;
 
 import com.github.robozonky.api.remote.entities.RawLoan;
 
 final class Util {
 
-    private static final Map<String, BigDecimal> BIGDECIMAL_CACHE = new HashMap<>(0);
     private static final Function<Integer, String> LOAN_URL_SUPPLIER =
-            (id) -> "https://app.zonky.cz/#/marketplace/detail/" + id + "/";
+            id -> "https://app.zonky.cz/#/marketplace/detail/" + id + "/";
 
     private Util() {
         // no instances
@@ -62,17 +58,5 @@ final class Util {
         }
     }
 
-    /**
-     * Reuses a single instance of {@link BigDecimal} for most common values, saving a lot of memory.
-     * @param original
-     * @return
-     */
-    static BigDecimal cacheBigDecimal(final BigDecimal original) {
-        if (original == null) {
-            return null;
-        }
-        final String s = original.toString();
-        return BIGDECIMAL_CACHE.computeIfAbsent(s, k -> original);
-    }
 }
 

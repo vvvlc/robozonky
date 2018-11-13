@@ -37,6 +37,7 @@ class SettingsTest {
     @AfterEach
     void reinit() {
         Settings.INSTANCE.reinit();
+        System.clearProperty(Settings.FILE_LOCATION_PROPERTY);
     }
 
     @Test
@@ -45,7 +46,6 @@ class SettingsTest {
             softly.assertThat(Settings.INSTANCE.get("user.dir", "")).isNotEqualTo("");
             softly.assertThat(Settings.INSTANCE.get(UUID.randomUUID().toString(), ""))
                     .isEqualTo("");
-            softly.assertThat(Settings.INSTANCE.isDebugEventStorageEnabled()).isFalse();
             softly.assertThat(Settings.INSTANCE.getTokenRefreshPeriod())
                     .matches(new SettingsTest.TemporalPredicate(60));
             softly.assertThat(Settings.INSTANCE.getRemoteResourceRefreshInterval())
@@ -78,7 +78,6 @@ class SettingsTest {
             softly.assertThat(Settings.INSTANCE.get("user.dir", "")).isNotEqualTo("");
             softly.assertThat(Settings.INSTANCE.get(UUID.randomUUID().toString(), ""))
                     .isEqualTo("");
-            softly.assertThat(Settings.INSTANCE.isDebugEventStorageEnabled()).isFalse();
             softly.assertThat(Settings.INSTANCE.isDebugHttpResponseLoggingEnabled()).isFalse();
             softly.assertThat(Settings.INSTANCE.getTokenRefreshPeriod())
                     .matches(new SettingsTest.TemporalPredicate(1000));

@@ -19,6 +19,8 @@ package com.github.robozonky.notifications.listeners;
 import java.io.PrintWriter;
 import java.io.StringWriter;
 import java.math.BigDecimal;
+import java.net.SocketException;
+import java.net.SocketTimeoutException;
 import java.time.LocalDate;
 import java.time.OffsetDateTime;
 import java.time.Period;
@@ -33,9 +35,11 @@ import java.util.stream.Collectors;
 import java.util.stream.Stream;
 
 import com.github.robozonky.api.notifications.LoanBased;
+import com.github.robozonky.api.notifications.MarketplaceLoanBased;
 import com.github.robozonky.api.remote.entities.sanitized.Development;
 import com.github.robozonky.api.remote.entities.sanitized.Investment;
 import com.github.robozonky.api.remote.entities.sanitized.Loan;
+import com.github.robozonky.api.remote.entities.sanitized.MarketplaceLoan;
 import com.github.robozonky.api.remote.enums.Rating;
 import com.github.robozonky.api.strategies.PortfolioOverview;
 import com.github.robozonky.internal.api.Defaults;
@@ -60,12 +64,19 @@ final class Util {
         return Date.from(offsetDateTime.toInstant());
     }
 
-    public static String identifyLoan(final LoanBased event) {
-        final Loan loan = event.getLoan();
+    private static String identifyLoan(final MarketplaceLoan loan) {
         return "č. " + loan.getId() + " (" + loan.getRating().getCode() + ", " + loan.getTermInMonths() + " m.)";
     }
 
-    public static Map<String, Object> getLoanData(final Loan loan) {
+    public static String identifyLoan(final MarketplaceLoanBased event) {
+        return identifyLoan(event.getLoan());
+    }
+
+    public static String identifyLoan(final LoanBased event) {
+        return identifyLoan(event.getLoan());
+    }
+
+    public static Map<String, Object> getLoanData(final MarketplaceLoan loan) {
         return Maps.ofEntries(
                 entry("loanId", loan.getId()),
                 entry("loanAmount", loan.getAmount()),
@@ -97,6 +108,16 @@ final class Util {
         );
     }
 
+    public static boolean isNetworkProblem(final Throwable ex) {
+        if (ex == null) {
+            return false;
+        } else if (ex instanceof SocketTimeoutException || ex instanceof SocketException) {
+            return true;
+        } else {
+            return isNetworkProblem(ex.getCause());
+        }
+    }
+
     private static BigDecimal getTotalPaid(final Investment i) {
         return i.getPaidInterest().add(i.getPaidPrincipal()).add(i.getPaidPenalty());
     }
@@ -105,7 +126,7 @@ final class Util {
         return Period.between(i.getInvestmentDate().toLocalDate(), LocalDate.now()).toTotalMonths();
     }
 
-    public static Map<String, Object> getLoanData(final Investment i, final Loan l) {
+    public static Map<String, Object> getLoanData(final Investment i, final MarketplaceLoan l) {
         final Map<String, Object> loanData = new HashMap<>(getLoanData(l));
         loanData.put("investedOn", Util.toDate(i.getInvestmentDate()));
         loanData.put("loanTermRemaining", i.getRemainingMonths());

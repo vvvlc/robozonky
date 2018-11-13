@@ -1,5 +1,5 @@
 /*
- * Copyright 2017 The RoboZonky Project
+ * Copyright 2018 The RoboZonky Project
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -19,13 +19,14 @@ package com.github.robozonky.strategy.natural;
 import java.time.LocalDate;
 import java.time.Period;
 
-import com.github.robozonky.api.remote.entities.sanitized.Loan;
+import com.github.robozonky.api.strategies.LoanDescriptor;
 import com.github.robozonky.strategy.natural.conditions.MarketplaceFilterCondition;
 
-public class DefaultValues {
+class DefaultValues {
 
     private final DefaultPortfolio portfolio;
-    private int targetPortfolioSize = Integer.MAX_VALUE, minimumBalance = 0;
+    private long targetPortfolioSize = Long.MAX_VALUE;
+    private long minimumBalance = 0;
     private InvestmentSize investmentSize = new InvestmentSize();
     private DefaultInvestmentShare investmentShare = new DefaultInvestmentShare();
     private ExitProperties exitProperties;
@@ -39,11 +40,11 @@ public class DefaultValues {
         return portfolio;
     }
 
-    public int getMinimumBalance() {
+    public long getMinimumBalance() {
         return minimumBalance;
     }
 
-    public void setMinimumBalance(final int minimumBalance) {
+    public void setMinimumBalance(final long minimumBalance) {
         this.minimumBalance = minimumBalance;
     }
 
@@ -67,11 +68,11 @@ public class DefaultValues {
         }
     }
 
-    public int getTargetPortfolioSize() {
+    public long getTargetPortfolioSize() {
         return targetPortfolioSize;
     }
 
-    public void setTargetPortfolioSize(final int targetPortfolioSize) {
+    public void setTargetPortfolioSize(final long targetPortfolioSize) {
         if (targetPortfolioSize <= 0) {
             throw new IllegalArgumentException("Target portfolio size must be a positive number.");
         }
@@ -97,8 +98,8 @@ public class DefaultValues {
         this.investmentSize = investmentSize;
     }
 
-    public boolean needsConfirmation(final Loan loan) {
-        return confirmationCondition.test(new Wrapper(loan));
+    public boolean needsConfirmation(final LoanDescriptor loan) {
+        return confirmationCondition.test(Wrapper.wrap(loan));
     }
 
     public void setConfirmationCondition(final MarketplaceFilterCondition confirmationCondition) {

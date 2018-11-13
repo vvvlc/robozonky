@@ -1,5 +1,5 @@
 /*
- * Copyright 2017 The RoboZonky Project
+ * Copyright 2018 The RoboZonky Project
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -20,30 +20,16 @@ import java.math.BigDecimal;
 import java.util.Optional;
 import java.util.function.Function;
 
-import com.github.robozonky.strategy.natural.Util;
 import com.github.robozonky.strategy.natural.Wrapper;
 
 abstract class AbstractRelativeRangeCondition extends MarketplaceFilterConditionImpl
         implements MarketplaceFilterCondition {
 
-    private final Function<Wrapper, Number> sumAccessor, partAccessor;
+    private final Function<Wrapper<?>, Number> sumAccessor, partAccessor;
     private final Number minInclusive, maxInclusive;
 
-    private void assertIsInRange(final Number percentage) {
-        final double num = Util.toBigDecimal(percentage).doubleValue();
-        if (num < 0 || num > 100) {
-            throw new IllegalArgumentException("Relative value must be in range of <0; 100> %, but was " + percentage);
-        }
-    }
-
-    private static BigDecimal getActualValue(final Number sum, final Number percentage) {
-        final BigDecimal s = Util.toBigDecimal(sum);
-        final BigDecimal p = Util.toBigDecimal(percentage);
-        return s.multiply(p).scaleByPowerOfTen(-2);
-    }
-
-    protected AbstractRelativeRangeCondition(final Function<Wrapper, Number> sumAccessor,
-                                             final Function<Wrapper, Number> partAccessor,
+    protected AbstractRelativeRangeCondition(final Function<Wrapper<?>, Number> sumAccessor,
+                                             final Function<Wrapper<?>, Number> partAccessor,
                                              final Number minValueInclusive, final Number maxValueInclusive) {
         assertIsInRange(minValueInclusive);
         assertIsInRange(maxValueInclusive);
@@ -53,13 +39,30 @@ abstract class AbstractRelativeRangeCondition extends MarketplaceFilterCondition
         this.maxInclusive = maxValueInclusive;
     }
 
+    private static BigDecimal toBigDecimal(final Number num) {
+        return new BigDecimal(num.toString());
+    }
+
+    private static BigDecimal getActualValue(final Number sum, final Number percentage) {
+        final BigDecimal s = toBigDecimal(sum);
+        final BigDecimal p = toBigDecimal(percentage);
+        return s.multiply(p).scaleByPowerOfTen(-2);
+    }
+
+    private static void assertIsInRange(final Number percentage) {
+        final double num = toBigDecimal(percentage).doubleValue();
+        if (num < 0 || num > 100) {
+            throw new IllegalArgumentException("Relative value must be in range of <0; 100> %, but was " + percentage);
+        }
+    }
+
     @Override
     public Optional<String> getDescription() {
         return Optional.of("Relative range: <" + minInclusive + "; " + maxInclusive + "> %.");
     }
 
     @Override
-    public boolean test(final Wrapper item) {
+    public boolean test(final Wrapper<?> item) {
         final BigDecimal realMinInclusive = getActualValue(sumAccessor.apply(item), minInclusive);
         final BigDecimal realMaxInclusive = getActualValue(sumAccessor.apply(item), maxInclusive);
         return new RangeCondition<>(partAccessor, realMinInclusive, realMaxInclusive).test(item);

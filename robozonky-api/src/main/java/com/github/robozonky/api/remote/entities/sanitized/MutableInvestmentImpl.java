@@ -33,13 +33,18 @@ import com.github.robozonky.api.remote.enums.InvestmentStatus;
 import com.github.robozonky.api.remote.enums.PaymentStatus;
 import com.github.robozonky.api.remote.enums.Rating;
 import com.github.robozonky.internal.api.Defaults;
-import com.github.robozonky.internal.api.ToStringBuilder;
+import com.github.robozonky.internal.util.LazyInitialized;
+import com.github.robozonky.internal.util.ToStringBuilder;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 final class MutableInvestmentImpl implements InvestmentBuilder {
 
+    private static final Logger LOGGER = LoggerFactory.getLogger(MutableInvestmentImpl.class);
     private static final Random RANDOM = new Random(0L);
 
-    private int loanId, id, currentTerm, originalTerm, remainingMonths;
+    private long id;
+    private int loanId, currentTerm, originalTerm, remainingMonths;
     private Integer daysPastDue;
     private OffsetDateTime nextPaymentDate;
     private volatile OffsetDateTime investmentDate; // may be updated from various threads
@@ -53,6 +58,7 @@ final class MutableInvestmentImpl implements InvestmentBuilder {
     private Collection<InsurancePolicyPeriod> insuranceHistory = Collections.emptyList();
     // default value for investment date, in case it is null
     private Supplier<LocalDate> investmentDateSupplier = LocalDate::now;
+    private final LazyInitialized<String> toString = ToStringBuilder.createFor(this, "toString");
 
     MutableInvestmentImpl() {
         this.id = RANDOM.nextInt(); // simplifies tests which do not have to generate random IDs themselves
@@ -66,6 +72,7 @@ final class MutableInvestmentImpl implements InvestmentBuilder {
      */
     MutableInvestmentImpl(final RawInvestment investment,
                           final Function<Investment, LocalDate> investmentDateSupplier) {
+        LOGGER.trace("Sanitizing investment #{} for loan #{}.", investment.getId(), investment.getLoanId());
         this.loanId = investment.getLoanId();
         this.id = investment.getId();
         this.currentTerm = investment.getCurrentTerm();
@@ -76,8 +83,8 @@ final class MutableInvestmentImpl implements InvestmentBuilder {
         this.nextPaymentDate = investment.getNextPaymentDate();
         this.canBeOffered = investment.isCanBeOffered();
         this.isOnSmp = investment.isOnSmp();
-        this.originalPrincipal = Util.cacheBigDecimal(investment.getPurchasePrice()); // likely to be multiples of 200
-        this.interestRate = Util.cacheBigDecimal(investment.getInterestRate()); // only a handful of these exist
+        this.originalPrincipal = investment.getPurchasePrice();
+        this.interestRate = investment.getInterestRate();
         this.paidPrincipal = investment.getPaidPrincipal();
         this.duePrincipal = investment.getDuePrincipal();
         this.paidInterest = investment.getPaidInterest();
@@ -109,7 +116,7 @@ final class MutableInvestmentImpl implements InvestmentBuilder {
         this.daysPastDue = 0;
         this.canBeOffered = false;
         this.isOnSmp = false;
-        this.originalPrincipal = Util.cacheBigDecimal(originalPrincipal); // likely to be multiples of 200
+        this.originalPrincipal = originalPrincipal;
         this.interestRate = loan.getInterestRate();
         this.paidPrincipal = BigDecimal.ZERO;
         this.duePrincipal = BigDecimal.ZERO;
@@ -139,7 +146,7 @@ final class MutableInvestmentImpl implements InvestmentBuilder {
     }
 
     @Override
-    public InvestmentBuilder setId(final int id) {
+    public InvestmentBuilder setId(final long id) {
         this.id = id;
         return this;
     }
@@ -301,7 +308,7 @@ final class MutableInvestmentImpl implements InvestmentBuilder {
     }
 
     @Override
-    public int getId() {
+    public long getId() {
         return id;
     }
 
@@ -444,6 +451,6 @@ final class MutableInvestmentImpl implements InvestmentBuilder {
 
     @Override
     public final String toString() {
-        return new ToStringBuilder(this).toString();
+        return toString.get();
     }
 }

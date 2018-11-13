@@ -17,9 +17,10 @@
 package com.github.robozonky.integrations.stonky;
 
 import java.io.ByteArrayInputStream;
-import java.io.File;
 import java.io.IOException;
 import java.io.InputStreamReader;
+import java.nio.file.Path;
+import java.nio.file.Paths;
 import java.util.Arrays;
 import java.util.List;
 import java.util.function.Supplier;
@@ -42,7 +43,6 @@ import org.slf4j.LoggerFactory;
 final class GoogleCredentialProvider implements CredentialProvider {
 
     private static final Logger LOGGER = LoggerFactory.getLogger(GoogleCredentialProvider.class);
-    private static final String CREDENTIALS_FOLDER = "Google"; // Directory to store user credentials.
 
     /**
      * Global instance of the scopes required by this quickstart.
@@ -68,16 +68,24 @@ final class GoogleCredentialProvider implements CredentialProvider {
         this.secrets = secret;
     }
 
+    private static Path getLocalFolder() {
+        final String dirName = Properties.GOOGLE_LOCAL_FOLDER.getValue()
+                .orElseThrow(() -> new IllegalStateException("Not possible."));
+        return Paths.get("").resolve(dirName).toAbsolutePath();
+    }
+
     private AuthorizationCodeFlow createFlow(final HttpTransport httpTransport) throws IOException {
+        final Path localFolder = getLocalFolder();
+        LOGGER.debug("Will look for Google credentials in '{}'.", localFolder);
         return new GoogleAuthorizationCodeFlow.Builder(httpTransport, Util.JSON_FACTORY, createClientSecrets(), SCOPES)
-                .setDataStoreFactory(new FileDataStoreFactory(new File(CREDENTIALS_FOLDER)))
+                .setDataStoreFactory(new FileDataStoreFactory(localFolder.toFile()))
                 .setAccessType("offline")
                 .build();
     }
 
     private GoogleClientSecrets createClientSecrets() throws IOException {
         final byte[] key = secrets.get();
-        return IoUtil.applyCloseable(() -> new ByteArrayInputStream(key),
+        return IoUtil.tryFunction(() -> new ByteArrayInputStream(key),
                                      s -> GoogleClientSecrets.load(Util.JSON_FACTORY, new InputStreamReader(s)));
     }
 
