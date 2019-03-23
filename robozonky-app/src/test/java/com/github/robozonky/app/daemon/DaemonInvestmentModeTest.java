@@ -1,5 +1,5 @@
 /*
- * Copyright 2018 The RoboZonky Project
+ * Copyright 2019 The RoboZonky Project
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -17,7 +17,6 @@
 package com.github.robozonky.app.daemon;
 
 import java.time.Duration;
-import java.util.UUID;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.concurrent.Future;
@@ -26,18 +25,14 @@ import java.util.concurrent.TimeoutException;
 
 import com.github.robozonky.app.AbstractZonkyLeveragingTest;
 import com.github.robozonky.app.ReturnCode;
-import com.github.robozonky.app.daemon.operations.Investor;
 import com.github.robozonky.app.runtime.Lifecycle;
-import com.github.robozonky.common.Tenant;
+import com.github.robozonky.app.tenant.PowerTenant;
+import com.github.robozonky.common.jobs.SimplePayload;
 import org.junit.jupiter.api.Test;
 
-import static org.assertj.core.api.Assertions.assertThat;
-import static org.assertj.core.api.Assertions.assertThatThrownBy;
+import static org.assertj.core.api.Assertions.*;
 import static org.mockito.ArgumentMatchers.any;
-import static org.mockito.Mockito.doNothing;
-import static org.mockito.Mockito.mock;
-import static org.mockito.Mockito.spy;
-import static org.mockito.Mockito.verify;
+import static org.mockito.Mockito.*;
 
 class DaemonInvestmentModeTest extends AbstractZonkyLeveragingTest {
 
@@ -47,24 +42,22 @@ class DaemonInvestmentModeTest extends AbstractZonkyLeveragingTest {
 
     @Test
     void get() throws Exception {
-        final Tenant a = mockTenant(harmlessZonky(10_000), true);
+        final PowerTenant a = mockTenant(harmlessZonky(10_000), true);
         final Investor b = Investor.build(a);
         final ExecutorService e = Executors.newFixedThreadPool(1);
-        final StrategyProvider p = mock(StrategyProvider.class);
-        final String name = UUID.randomUUID().toString();
-        try (final DaemonInvestmentMode d = spy(new DaemonInvestmentMode(name, a, b, p, ONE_SECOND, ONE_SECOND))) {
-            assertThat(d.getSessionName()).isEqualTo(name);
-            doNothing().when(d).scheduleJob(any(), any(), any()); // otherwise jobs will run and try to log into Zonky
+        try (final DaemonInvestmentMode d = spy(new DaemonInvestmentMode(a, b, ONE_SECOND))) {
+            assertThat(d.getSessionInfo()).isSameAs(a.getSessionInfo());
+            doNothing().when(d).submit(any(), any(), any(), any(), any());
             final Future<ReturnCode> f = e.submit(() -> d.apply(lifecycle)); // will block
             assertThatThrownBy(() -> f.get(1, TimeUnit.SECONDS)).isInstanceOf(TimeoutException.class);
-            lifecycle.resumeToShutdown(); // unblock
+            lifecycle.resume(); // unblock
             assertThat(f.get()).isEqualTo(ReturnCode.OK); // should now finish
-            verify(p).getToInvest();
-            verify(p).getToPurchase();
+            // call all the jobs and daemons we know about
+            verify(d, times(2)).submit(any(), any(SimplePayload.class), any(), any(), any());
+            verify(d, times(11)).submit(any(), any(), any(), any(), any());
         } finally {
             e.shutdownNow();
         }
         verify(a).close();
     }
-
 }

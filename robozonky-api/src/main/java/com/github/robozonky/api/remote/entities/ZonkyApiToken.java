@@ -21,10 +21,16 @@ import java.time.OffsetDateTime;
 import java.time.temporal.TemporalAmount;
 import java.util.Arrays;
 import java.util.Objects;
+import java.util.concurrent.atomic.AtomicLong;
 import javax.xml.bind.annotation.XmlAccessType;
 import javax.xml.bind.annotation.XmlAccessorType;
 import javax.xml.bind.annotation.XmlElement;
 import javax.xml.bind.annotation.XmlRootElement;
+import javax.xml.bind.annotation.XmlTransient;
+
+import com.github.robozonky.api.remote.enums.OAuthScope;
+import com.github.robozonky.api.remote.enums.OAuthScopes;
+import com.github.robozonky.internal.util.DateUtil;
 
 /**
  * OAuth access token for Zonky API.
@@ -37,9 +43,11 @@ import javax.xml.bind.annotation.XmlRootElement;
 public class ZonkyApiToken extends BaseEntity {
 
     public static final String REFRESH_TOKEN_STRING = "refresh_token";
-    public static final String SCOPE_APP_WEB_STRING = "SCOPE_APP_WEB";
-    public static final String SCOPE_FILE_DOWNLOAD_STRING = "SCOPE_FILE_DOWNLOAD";
 
+    private static final AtomicLong ID_GENERATOR = new AtomicLong(0);
+
+    @XmlTransient
+    private final long id = ID_GENERATOR.getAndIncrement();
     @XmlElement(name = "access_token")
     private char[] accessToken;
     @XmlElement(name = REFRESH_TOKEN_STRING)
@@ -47,44 +55,49 @@ public class ZonkyApiToken extends BaseEntity {
     @XmlElement(name = "token_type")
     private String type;
     @XmlElement
-    private String scope;
+    private OAuthScopes scope;
     @XmlElement(name = "expires_in")
     private int expiresIn;
     /**
      * This is not part of the Zonky API, but it will be useful inside RoboZonky.
      */
     @XmlElement(name = "obtained_on")
-    private OffsetDateTime obtainedOn = OffsetDateTime.now();
+    private OffsetDateTime obtainedOn = DateUtil.offsetNow();
 
     ZonkyApiToken() {
         // fox JAXB
     }
 
     public ZonkyApiToken(final String accessToken, final String refreshToken, final OffsetDateTime obtainedOn) {
-        this(accessToken, refreshToken, 299, obtainedOn, REFRESH_TOKEN_STRING, SCOPE_APP_WEB_STRING);
+        this(accessToken, refreshToken, 299, obtainedOn, REFRESH_TOKEN_STRING, OAuthScope.SCOPE_APP_WEB);
     }
 
     public ZonkyApiToken(final String accessToken, final String refreshToken, final int expiresIn) {
-        this(accessToken, refreshToken, expiresIn, OffsetDateTime.now(), REFRESH_TOKEN_STRING, SCOPE_APP_WEB_STRING);
+        this(accessToken, refreshToken, expiresIn, DateUtil.offsetNow(), REFRESH_TOKEN_STRING, OAuthScope.SCOPE_APP_WEB);
     }
 
-    public ZonkyApiToken(final String accessToken, final String refreshToken, final int expiresIn,final String scope) {
-        this(accessToken, refreshToken, expiresIn, OffsetDateTime.now(), REFRESH_TOKEN_STRING, scope);
+    public ZonkyApiToken(final String accessToken, final String refreshToken, final int expiresIn,
+                         final OAuthScope scope) {
+        this(accessToken, refreshToken, expiresIn, DateUtil.offsetNow(), REFRESH_TOKEN_STRING, scope);
     }
 
     public ZonkyApiToken(final String accessToken, final String refreshToken, final int expiresIn,
                          final OffsetDateTime obtainedOn) {
-        this(accessToken, refreshToken, expiresIn, obtainedOn, REFRESH_TOKEN_STRING, SCOPE_APP_WEB_STRING);
+        this(accessToken, refreshToken, expiresIn, obtainedOn, REFRESH_TOKEN_STRING, OAuthScope.SCOPE_APP_WEB);
     }
 
     public ZonkyApiToken(final String accessToken, final String refreshToken, final int expiresIn,
-                         final OffsetDateTime obtainedOn, final String type, final String scope) {
+                         final OffsetDateTime obtainedOn, final String type, final OAuthScope... scope) {
         this.accessToken = accessToken.toCharArray();
         this.refreshToken = refreshToken.toCharArray();
         this.expiresIn = expiresIn;
         this.type = type;
-        this.scope = scope;
+        this.scope = scope.length == 0 ? OAuthScopes.of() : OAuthScopes.of(scope);
         this.obtainedOn = obtainedOn;
+    }
+
+    public long getId() {
+        return id;
     }
 
     public char[] getAccessToken() {
@@ -107,7 +120,11 @@ public class ZonkyApiToken extends BaseEntity {
         return expiresIn;
     }
 
-    public String getScope() {
+    public boolean isExpired() {
+        return willExpireIn(Duration.ZERO);
+    }
+
+    public OAuthScopes getScope() {
         return scope;
     }
 
@@ -120,7 +137,7 @@ public class ZonkyApiToken extends BaseEntity {
     }
 
     public boolean willExpireIn(final TemporalAmount temporalAmount) {
-        final OffsetDateTime maxExpirationDate = OffsetDateTime.now().plus(temporalAmount);
+        final OffsetDateTime maxExpirationDate = DateUtil.offsetNow().plus(temporalAmount);
         return getExpiresOn().isBefore(maxExpirationDate);
     }
 

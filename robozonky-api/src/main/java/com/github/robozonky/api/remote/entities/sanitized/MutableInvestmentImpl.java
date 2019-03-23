@@ -1,5 +1,5 @@
 /*
- * Copyright 2018 The RoboZonky Project
+ * Copyright 2019 The RoboZonky Project
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -23,7 +23,7 @@ import java.util.ArrayList;
 import java.util.Collection;
 import java.util.Collections;
 import java.util.Optional;
-import java.util.Random;
+import java.util.concurrent.atomic.AtomicReference;
 import java.util.function.Function;
 import java.util.function.Supplier;
 
@@ -33,35 +33,36 @@ import com.github.robozonky.api.remote.enums.InvestmentStatus;
 import com.github.robozonky.api.remote.enums.PaymentStatus;
 import com.github.robozonky.api.remote.enums.Rating;
 import com.github.robozonky.internal.api.Defaults;
-import com.github.robozonky.internal.util.LazyInitialized;
+import com.github.robozonky.internal.util.DateUtil;
+import com.github.robozonky.internal.util.RandomUtil;
 import com.github.robozonky.internal.util.ToStringBuilder;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
+import io.vavr.Lazy;
+import org.apache.logging.log4j.LogManager;
+import org.apache.logging.log4j.Logger;
 
 final class MutableInvestmentImpl implements InvestmentBuilder {
 
-    private static final Logger LOGGER = LoggerFactory.getLogger(MutableInvestmentImpl.class);
-    private static final Random RANDOM = new Random(0L);
-
+    private static final Logger LOGGER = LogManager.getLogger(MutableInvestmentImpl.class);
+    private final AtomicReference<OffsetDateTime> investmentDate = new AtomicReference<>();
+    private final Lazy<String> toString = Lazy.of(() -> ToStringBuilder.createFor(this, "toString"));
     private long id;
     private int loanId, currentTerm, originalTerm, remainingMonths;
     private Integer daysPastDue;
     private OffsetDateTime nextPaymentDate;
-    private volatile OffsetDateTime investmentDate; // may be updated from various threads
     private boolean canBeOffered, isOnSmp, isInsuranceActive, areInstalmentsPostponed;
     private Boolean isInWithdrawal;
     private BigDecimal originalPrincipal, interestRate, paidPrincipal, duePrincipal, paidInterest, dueInterest,
             expectedInterest, paidPenalty, remainingPrincipal, smpFee, smpSoldFor;
+    private BigDecimal revenueRate;
     private Rating rating;
     private InvestmentStatus status;
     private PaymentStatus paymentStatus;
     private Collection<InsurancePolicyPeriod> insuranceHistory = Collections.emptyList();
     // default value for investment date, in case it is null
-    private Supplier<LocalDate> investmentDateSupplier = LocalDate::now;
-    private final LazyInitialized<String> toString = ToStringBuilder.createFor(this, "toString");
+    private Supplier<LocalDate> investmentDateSupplier = () -> DateUtil.localNow().toLocalDate();
 
     MutableInvestmentImpl() {
-        this.id = RANDOM.nextInt(); // simplifies tests which do not have to generate random IDs themselves
+        this.id = RandomUtil.getNextInt(); // simplifies tests which do not have to generate random IDs themselves
     }
 
     /**
@@ -79,12 +80,13 @@ final class MutableInvestmentImpl implements InvestmentBuilder {
         this.originalTerm = investment.getLoanTermInMonth();
         this.remainingMonths = investment.getRemainingMonths();
         this.daysPastDue = investment.getLegalDpd();
-        this.investmentDate = investment.getInvestmentDate();
+        this.investmentDate.set(investment.getInvestmentDate());
         this.nextPaymentDate = investment.getNextPaymentDate();
         this.canBeOffered = investment.isCanBeOffered();
         this.isOnSmp = investment.isOnSmp();
         this.originalPrincipal = investment.getPurchasePrice();
         this.interestRate = investment.getInterestRate();
+        this.revenueRate = investment.getRevenueRate();
         this.paidPrincipal = investment.getPaidPrincipal();
         this.duePrincipal = investment.getDuePrincipal();
         this.paidInterest = investment.getPaidInterest();
@@ -107,7 +109,7 @@ final class MutableInvestmentImpl implements InvestmentBuilder {
     MutableInvestmentImpl(final MarketplaceLoan loan, final BigDecimal originalPrincipal) {
         loan.getMyInvestment().ifPresent(i -> {
             this.id = i.getId();
-            this.investmentDate = i.getTimeCreated();
+            this.investmentDate.set(i.getTimeCreated());
         });
         this.loanId = loan.getId();
         this.currentTerm = loan.getTermInMonths();
@@ -118,6 +120,7 @@ final class MutableInvestmentImpl implements InvestmentBuilder {
         this.isOnSmp = false;
         this.originalPrincipal = originalPrincipal;
         this.interestRate = loan.getInterestRate();
+        this.revenueRate = loan.getRevenueRate();
         this.paidPrincipal = BigDecimal.ZERO;
         this.duePrincipal = BigDecimal.ZERO;
         this.paidInterest = BigDecimal.ZERO;
@@ -140,7 +143,7 @@ final class MutableInvestmentImpl implements InvestmentBuilder {
     }
 
     @Override
-    public InvestmentBuilder setAmountInvested(final BigDecimal amountInvested) {
+    public InvestmentBuilder setOriginalPrincipal(final BigDecimal amountInvested) {
         this.originalPrincipal = amountInvested;
         return this;
     }
@@ -154,6 +157,12 @@ final class MutableInvestmentImpl implements InvestmentBuilder {
     @Override
     public InvestmentBuilder setInterestRate(final BigDecimal interestRate) {
         this.interestRate = interestRate;
+        return this;
+    }
+
+    @Override
+    public InvestmentBuilder setRevenueRate(final BigDecimal revenueRate) {
+        this.revenueRate = revenueRate;
         return this;
     }
 
@@ -261,7 +270,7 @@ final class MutableInvestmentImpl implements InvestmentBuilder {
 
     @Override
     public synchronized InvestmentBuilder setInvestmentDate(final OffsetDateTime investmentDate) {
-        this.investmentDate = investmentDate;
+        this.investmentDate.set(investmentDate);
         return this;
     }
 
@@ -328,11 +337,13 @@ final class MutableInvestmentImpl implements InvestmentBuilder {
     }
 
     @Override
-    public synchronized OffsetDateTime getInvestmentDate() {
-        if (investmentDate == null) {
-            investmentDate = investmentDateSupplier.get().atStartOfDay(Defaults.ZONE_ID).toOffsetDateTime();
-        }
-        return investmentDate;
+    public OffsetDateTime getInvestmentDate() {
+        return investmentDate.updateAndGet(old -> {
+            if (old == null) {
+                return investmentDateSupplier.get().atStartOfDay(Defaults.ZONE_ID).toOffsetDateTime();
+            }
+            return old;
+        });
     }
 
     @Override
@@ -378,6 +389,11 @@ final class MutableInvestmentImpl implements InvestmentBuilder {
     @Override
     public BigDecimal getInterestRate() {
         return interestRate;
+    }
+
+    @Override
+    public BigDecimal getRevenueRate() {
+        return revenueRate;
     }
 
     @Override

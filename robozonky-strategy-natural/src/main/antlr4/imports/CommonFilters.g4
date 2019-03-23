@@ -7,6 +7,7 @@ import Tokens;
     import java.util.ArrayList;
     import java.util.Map;
     import java.util.HashMap;
+    import com.github.robozonky.internal.util.BigDecimalCalculator;
     import com.github.robozonky.strategy.natural.conditions.*;
 }
 
@@ -154,29 +155,6 @@ elapsedRelativeTermConditionRangeClosedRight returns [MarketplaceFilterCondition
     { $result = new RelativeElapsedLoanTermCondition(0, $max.result - 1); }
 ;
 
-interestCondition returns [MarketplaceFilterCondition result]:
-    'úrok ' (
-        (c1 = interestConditionRangeOpen { $result = $c1.result; })
-        | (c2 = interestConditionRangeClosedLeft { $result = $c2.result; })
-        | (c3 = interestConditionRangeClosedRight { $result = $c3.result; })
-    ) ' % p.a' DOT? // last dot is optional, so that it is possible to end sentence like "p.a." and not "p.a.."
-;
-
-interestConditionRangeOpen returns [MarketplaceFilterCondition result]:
-    IS min=floatExpr UP_TO max=floatExpr
-    { $result = new LoanInterestRateCondition($min.result, $max.result); }
-;
-
-interestConditionRangeClosedLeft returns [MarketplaceFilterCondition result]:
-    MORE_THAN min=floatExpr
-    { $result = new LoanInterestRateCondition(LoanInterestRateCondition.moreThan($min.result)); }
-;
-
-interestConditionRangeClosedRight returns [MarketplaceFilterCondition result]:
-    LESS_THAN max=floatExpr
-    { $result = new LoanInterestRateCondition(BigDecimal.ZERO, LoanInterestRateCondition.lessThan($max.result)); }
-;
-
 amountCondition returns [MarketplaceFilterCondition result]:
     'výše ' (
         (c1 = amountConditionRangeOpen { $result = $c1.result; })
@@ -200,25 +178,72 @@ amountConditionRangeClosedRight returns [MarketplaceFilterCondition result]:
     { $result = new LoanAmountCondition(0, $max.result - 1); }
 ;
 
-remainingAmountCondition returns [MarketplaceFilterCondition result]:
+remainingPrincipalCondition returns [MarketplaceFilterCondition result]:
     'zbývající jistina ' (
-        (c1 = remainingAmountConditionRangeOpen { $result = $c1.result; })
-        | (c2 = remainingAmountConditionRangeClosedLeft { $result = $c2.result; })
-        | (c3 = remainingAmountConditionRangeClosedRight { $result = $c3.result; })
+        (c1 = remainingPrincipalConditionRangeOpen { $result = $c1.result; })
+        | (c2 = remainingPrincipalConditionRangeClosedLeft { $result = $c2.result; })
+        | (c3 = remainingPrincipalConditionRangeClosedRight { $result = $c3.result; })
     ) KC
 ;
 
-remainingAmountConditionRangeOpen returns [MarketplaceFilterCondition result]:
+remainingPrincipalConditionRangeOpen returns [MarketplaceFilterCondition result]:
     IS min=intExpr UP_TO max=intExpr
-    { $result = new RemainingAmountCondition($min.result, $max.result); }
+    { $result = new RemainingPrincipalCondition($min.result, $max.result); }
 ;
 
-remainingAmountConditionRangeClosedLeft returns [MarketplaceFilterCondition result]:
+remainingPrincipalConditionRangeClosedLeft returns [MarketplaceFilterCondition result]:
     MORE_THAN min=intExpr
-    { $result = new RemainingAmountCondition($min.result + 1); }
+    { $result = new RemainingPrincipalCondition($min.result + 1); }
 ;
 
-remainingAmountConditionRangeClosedRight returns [MarketplaceFilterCondition result]:
+remainingPrincipalConditionRangeClosedRight returns [MarketplaceFilterCondition result]:
     LESS_THAN max=intExpr
-    { $result = new RemainingAmountCondition(0, $max.result - 1); }
+    { $result = new RemainingPrincipalCondition(0, $max.result - 1); }
+;
+
+annuityCondition returns [MarketplaceFilterCondition result]:
+    'měsíční splátka ' (
+        (c1 = annuityConditionRangeOpen { $result = $c1.result; })
+        | (c2 = annuityConditionRangeClosedLeft { $result = $c2.result; })
+        | (c3 = annuityConditionRangeClosedRight { $result = $c3.result; })
+    ) KC
+;
+
+annuityConditionRangeOpen returns [MarketplaceFilterCondition result]:
+    IS min=intExpr UP_TO max=intExpr
+    { $result = new LoanAnnuityCondition($min.result, $max.result); }
+;
+
+annuityConditionRangeClosedLeft returns [MarketplaceFilterCondition result]:
+    MORE_THAN min=intExpr
+    { $result = new LoanAnnuityCondition($min.result + 1); }
+;
+
+annuityConditionRangeClosedRight returns [MarketplaceFilterCondition result]:
+    LESS_THAN max=intExpr
+    { $result = new LoanAnnuityCondition(0, $max.result - 1); }
+;
+
+revenueRateCondition returns [MarketplaceFilterCondition result]:
+    'optimální výnos ' (
+        (c1 = revenueRateConditionRangeOpen { $result = $c1.result; })
+        | (c2 = revenueRateConditionRangeClosedLeft { $result = $c2.result; })
+        | (c3 = revenueRateConditionRangeClosedRight { $result = $c3.result; })
+     ) ' % p.a' DOT?
+;
+
+revenueRateConditionRangeOpen returns [MarketplaceFilterCondition result]:
+    IS min=floatExpr UP_TO max=floatExpr {
+        $result = new RevenueRateCondition($min.result, $max.result);
+    }
+;
+
+revenueRateConditionRangeClosedLeft returns [MarketplaceFilterCondition result]:
+    MORE_THAN min=floatExpr
+    { $result = new RevenueRateCondition(BigDecimalCalculator.moreThan($min.result)); }
+;
+
+revenueRateConditionRangeClosedRight returns [MarketplaceFilterCondition result]:
+    LESS_THAN max=floatExpr
+    { $result = new RevenueRateCondition(BigDecimal.ZERO, BigDecimalCalculator.lessThan($max.result)); }
 ;

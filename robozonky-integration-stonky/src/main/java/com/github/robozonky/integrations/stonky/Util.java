@@ -1,5 +1,5 @@
 /*
- * Copyright 2018 The RoboZonky Project
+ * Copyright 2019 The RoboZonky Project
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -26,9 +26,7 @@ import java.util.function.Function;
 import java.util.function.Supplier;
 
 import com.github.robozonky.internal.api.Defaults;
-import com.github.robozonky.util.IoUtil;
-import com.github.robozonky.util.ThrowingFunction;
-import com.github.robozonky.util.ThrowingSupplier;
+import com.github.robozonky.internal.util.UrlUtil;
 import com.google.api.client.auth.oauth2.Credential;
 import com.google.api.client.googleapis.javanet.GoogleNetHttpTransport;
 import com.google.api.client.http.HttpTransport;
@@ -36,14 +34,15 @@ import com.google.api.client.json.JsonFactory;
 import com.google.api.client.json.jackson2.JacksonFactory;
 import com.google.api.services.drive.Drive;
 import com.google.api.services.sheets.v4.Sheets;
+import io.vavr.control.Try;
 import org.apache.commons.io.FileUtils;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
+import org.apache.logging.log4j.LogManager;
+import org.apache.logging.log4j.Logger;
 
 public final class Util {
 
     static final JsonFactory JSON_FACTORY = JacksonFactory.getDefaultInstance();
-    private static final Logger LOGGER = LoggerFactory.getLogger(Util.class);
+    private static final Logger LOGGER = LogManager.getLogger(Util.class);
     private static final String APPLICATION_NAME = Defaults.ROBOZONKY_USER_AGENT;
 
     private Util() {
@@ -114,13 +113,12 @@ public final class Util {
     }
 
     static Optional<File> download(final URL url) {
-        LOGGER.debug("Will download file from {}.", url);
-        try {
-            return IoUtil.tryFunction(url::openStream, Util::download);
-        } catch (final Exception ex) {
-            LOGGER.warn("Failed downloading file.", ex);
-            return Optional.empty();
-        }
+        return Try.withResources(() -> UrlUtil.open(url))
+                .of(Util::download)
+                .getOrElseGet(t -> {
+                    LOGGER.warn("Failed downloading file.", t);
+                    return Optional.empty();
+                });
     }
 
     static Optional<File> download(final InputStream stream) {
@@ -133,5 +131,4 @@ public final class Util {
             return Optional.empty();
         }
     }
-
 }

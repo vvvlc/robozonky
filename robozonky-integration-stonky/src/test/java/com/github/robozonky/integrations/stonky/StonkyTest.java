@@ -1,5 +1,5 @@
 /*
- * Copyright 2018 The RoboZonky Project
+ * Copyright 2019 The RoboZonky Project
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -21,13 +21,15 @@ import java.util.function.Consumer;
 import javax.ws.rs.core.Response;
 
 import com.github.robozonky.api.SessionInfo;
-import com.github.robozonky.common.Tenant;
 import com.github.robozonky.common.remote.Zonky;
+import com.github.robozonky.common.tenant.Tenant;
 import com.github.robozonky.test.AbstractRoboZonkyTest;
 import com.google.api.client.auth.oauth2.Credential;
 import com.google.api.services.drive.model.File;
 import com.google.api.services.sheets.v4.model.Spreadsheet;
+import org.junit.jupiter.api.AfterAll;
 import org.junit.jupiter.api.AfterEach;
+import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Nested;
 import org.junit.jupiter.api.Test;
@@ -36,12 +38,9 @@ import org.mockserver.model.HttpRequest;
 import org.mockserver.model.HttpResponse;
 import org.mockserver.socket.PortFactory;
 
-import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.*;
 import static org.mockito.ArgumentMatchers.any;
-import static org.mockito.Mockito.doReturn;
-import static org.mockito.Mockito.mock;
-import static org.mockito.Mockito.verify;
-import static org.mockito.Mockito.when;
+import static org.mockito.Mockito.*;
 
 class StonkyTest extends AbstractRoboZonkyTest {
 
@@ -49,17 +48,22 @@ class StonkyTest extends AbstractRoboZonkyTest {
     private final Zonky zonky = mock(Zonky.class);
     private final Tenant tenant = mockTenant(zonky);
 
-    private ClientAndServer server;
-    private String serverUrl;
+    private static ClientAndServer server;
+    private static String serverUrl;
 
-    @BeforeEach
-    void startServer() {
+    @BeforeAll
+    static void startServer() {
         server = ClientAndServer.startClientAndServer(PortFactory.findFreePort());
         serverUrl = "127.0.0.1:" + server.getLocalPort();
     }
 
     @AfterEach
-    void stopServer() {
+    void resetServer() {
+        server.reset();
+    }
+
+    @AfterAll
+    static void stopServer() {
         server.stop();
     }
 

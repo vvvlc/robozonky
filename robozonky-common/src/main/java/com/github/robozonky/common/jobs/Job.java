@@ -1,5 +1,5 @@
 /*
- * Copyright 2018 The RoboZonky Project
+ * Copyright 2019 The RoboZonky Project
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -18,6 +18,8 @@ package com.github.robozonky.common.jobs;
 
 import java.time.Duration;
 
+import com.github.robozonky.internal.util.RandomUtil;
+
 public interface Job {
 
     /**
@@ -25,7 +27,7 @@ public interface Job {
      * @return By default, this returns a random duration of less than 1000 seconds.
      */
     default Duration startIn() {
-        final long randomSeconds = (long) Math.abs(Math.random() * 1000);
+        final long randomSeconds = RandomUtil.getNextInt(1000);
         return Duration.ofSeconds(randomSeconds);
     }
 
@@ -41,6 +43,14 @@ public interface Job {
      */
     default Duration killIn() {
         return Duration.ofMinutes(1);
+    }
+
+    /**
+     *
+     * @return If true, signals to the calling code that this task should be given a priority thread, if possible.
+     */
+    default boolean prioritize() {
+        return false;
     }
 
 }

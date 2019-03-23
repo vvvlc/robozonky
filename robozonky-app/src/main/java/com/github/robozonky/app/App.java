@@ -1,5 +1,5 @@
 /*
- * Copyright 2018 The RoboZonky Project
+ * Copyright 2019 The RoboZonky Project
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -22,24 +22,25 @@ import java.util.Optional;
 
 import com.github.robozonky.app.configuration.CommandLine;
 import com.github.robozonky.app.configuration.InvestmentMode;
-import com.github.robozonky.app.events.EventFactory;
 import com.github.robozonky.app.events.Events;
-import com.github.robozonky.app.management.Management;
+import com.github.robozonky.app.events.impl.EventFactory;
 import com.github.robozonky.app.runtime.Lifecycle;
-import com.github.robozonky.util.IoUtil;
-import com.github.robozonky.util.Scheduler;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
+import com.github.robozonky.common.async.Tasks;
+import com.github.robozonky.common.management.Management;
+import io.vavr.Lazy;
+import io.vavr.control.Try;
+import org.apache.logging.log4j.LogManager;
+import org.apache.logging.log4j.Logger;
 
 /**
  * You are required to exit this app by calling {@link #exit(ReturnCode)}.
  */
 public class App implements Runnable {
 
-    private static final Logger LOGGER = LoggerFactory.getLogger(App.class);
+    private static final Logger LOGGER = LogManager.getLogger(App.class);
 
     private final ShutdownHook shutdownHooks = new ShutdownHook();
-    private final Lifecycle lifecycle = new Lifecycle(shutdownHooks);
+    private final Lazy<Lifecycle> lifecycle = Lazy.of(() -> new Lifecycle(shutdownHooks));
     private final String[] args;
 
     public App(final String... args) {
@@ -53,9 +54,7 @@ public class App implements Runnable {
 
     private void exit(final ReturnCode returnCode) {
         LOGGER.trace("Exit requested with return code {}.", returnCode);
-        final ShutdownHook.Result r = lifecycle.getTerminationCause()
-                .map(t -> new ShutdownHook.Result(ReturnCode.ERROR_UNEXPECTED, t))
-                .orElse(new ShutdownHook.Result(returnCode, null));
+        final ShutdownHook.Result r = new ShutdownHook.Result(returnCode);
         exit(r);
     }
 
@@ -78,29 +77,29 @@ public class App implements Runnable {
     }
 
     ReturnCode execute(final InvestmentMode mode) {
-        try {
-            return IoUtil.tryFunction(() -> mode, this::executeSafe);
-        } catch (final Throwable t) {
-            LOGGER.error("Caught unexpected exception, terminating daemon.", t);
-            return ReturnCode.ERROR_UNEXPECTED;
-        }
+        return Try.withResources(() -> mode)
+                .of(this::executeSafe)
+                .getOrElseGet(t -> {
+                    LOGGER.error("Caught unexpected exception, terminating daemon.", t);
+                    return ReturnCode.ERROR_UNEXPECTED;
+                });
     }
 
     private ReturnCode executeSafe(final InvestmentMode m) {
-        shutdownHooks.register(() -> Optional.of(r -> Scheduler.inBackground().close()));
-        Events.allSessions().fire(EventFactory.roboZonkyStarting());
+        Events.global().fire(EventFactory.roboZonkyStarting());
         ensureLiveness();
-        shutdownHooks.register(new Management(lifecycle));
-        shutdownHooks.register(new RoboZonkyStartupNotifier(m.getSessionName()));
-        return m.apply(lifecycle);
+        shutdownHooks.register(new RoboZonkyStartupNotifier(m.getSessionInfo()));
+        shutdownHooks.register(() -> Optional.of(r -> Tasks.closeAll()));
+        shutdownHooks.register(() -> Optional.of(result -> Management.unregisterAll()));
+        return m.apply(getLifecycle());
     }
 
-    public void resumeToFail(final Throwable throwable) {
-        lifecycle.resumeToFail(throwable);
+    public Lifecycle getLifecycle() {
+        return lifecycle.get();
     }
 
     void ensureLiveness() {
-        if (!lifecycle.waitUntilOnline()) {
+        if (!getLifecycle().waitUntilOnline()) {
             exit(ReturnCode.ERROR_DOWN);
         }
     }

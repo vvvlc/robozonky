@@ -1,5 +1,5 @@
 /*
- * Copyright 2018 The RoboZonky Project
+ * Copyright 2019 The RoboZonky Project
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -16,8 +16,6 @@
 
 package com.github.robozonky.app.runtime;
 
-import java.time.Duration;
-import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.ExecutionException;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
@@ -26,31 +24,16 @@ import java.util.concurrent.TimeUnit;
 import java.util.concurrent.TimeoutException;
 
 import com.github.robozonky.app.ShutdownHook;
+import com.github.robozonky.app.events.AbstractEventLeveragingTest;
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.Test;
 
-import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.*;
 import static org.assertj.core.api.SoftAssertions.assertSoftly;
 import static org.mockito.ArgumentMatchers.any;
-import static org.mockito.Mockito.doThrow;
-import static org.mockito.Mockito.mock;
-import static org.mockito.Mockito.spy;
-import static org.mockito.Mockito.times;
-import static org.mockito.Mockito.verify;
+import static org.mockito.Mockito.*;
 
-class LifecycleTest {
-
-    @Test
-    void failing() {
-        final Throwable t = new IllegalStateException("Testing exception.");
-        final CountDownLatch c = new CountDownLatch(1);
-        final Lifecycle h = new Lifecycle(c);
-        Assertions.assertTimeout(Duration.ofSeconds(1), () -> h.resumeToFail(t));
-        assertSoftly(softly -> {
-            softly.assertThat(h.getTerminationCause()).contains(t);
-            softly.assertThat(c.getCount()).isEqualTo(0);
-        });
-    }
+class LifecycleTest extends AbstractEventLeveragingTest {
 
     @Test
     void waitUntilOnline() throws ExecutionException, InterruptedException, TimeoutException {
@@ -81,14 +64,18 @@ class LifecycleTest {
         }
     }
 
+    /**
+     * This will unfortunately call the Zonky API, making the test flaky during Zonky downtimes.
+     */
     @Test
     void create() {
         final ShutdownHook hooks = spy(ShutdownHook.class);
         final Lifecycle h = new Lifecycle(hooks);
         assertSoftly(softly -> {
-            softly.assertThat(h.getZonkyApiVersion()).isEmpty();
-            softly.assertThat(h.getTerminationCause()).isEmpty();
+            softly.assertThat(h.getZonkyApiVersion()).isNotEmpty();
+            softly.assertThat(h.getZonkyApiLastUpdate()).isNotNull();
+            softly.assertThat(h.isOnline()).isTrue();
         });
-        verify(hooks, times(2)).register(any()); // 2 shutdown hooks have been registered
+        verify(hooks).register(any()); // 2 shutdown hooks have been registered
     }
 }

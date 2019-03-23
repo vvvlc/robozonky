@@ -1,5 +1,5 @@
 /*
- * Copyright 2018 The RoboZonky Project
+ * Copyright 2019 The RoboZonky Project
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -30,7 +30,7 @@ import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.condition.DisabledOnJre;
 import org.junit.jupiter.api.condition.JRE;
 
-import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.*;
 import static org.assertj.core.api.SoftAssertions.assertSoftly;
 
 /**
@@ -93,12 +93,39 @@ class InterestNumberFormatFactoryTest {
     }
 
     @Test
+    void formattingEnglishLongZero() throws TemplateValueFormatException, TemplateModelException {
+        final TemplateNumberFormat f = InterestNumberFormatFactory.INSTANCE.get("", Locale.ENGLISH,
+                                                                                Environment.getCurrentEnvironment());
+        final TemplateNumberModel m = () -> new BigDecimal("0.000000000000000000");
+        final Object result = f.formatToPlainText(m);
+        assertThat(result).isEqualTo("0.00%");
+    }
+
+    @Test
     void formattingEnglishRoundingUp() throws TemplateValueFormatException, TemplateModelException {
         final TemplateNumberFormat f = InterestNumberFormatFactory.INSTANCE.get("", Locale.ENGLISH,
                                                                                 Environment.getCurrentEnvironment());
         final TemplateNumberModel m = () -> new BigDecimal("0.00049");
         final Object result = f.formatToPlainText(m);
         assertThat(result).isEqualTo("0.05%");
+    }
+
+    @Test
+    void formattingEnglishRoundingEvenUp() throws TemplateValueFormatException, TemplateModelException {
+        final TemplateNumberFormat f = InterestNumberFormatFactory.INSTANCE.get("", Locale.ENGLISH,
+                                                                                Environment.getCurrentEnvironment());
+        final TemplateNumberModel m = () -> new BigDecimal("0.00055");
+        final Object result = f.formatToPlainText(m);
+        assertThat(result).isEqualTo("0.06%");
+    }
+
+    @Test
+    void formattingEnglishRoundingEvenDown() throws TemplateValueFormatException, TemplateModelException {
+        final TemplateNumberFormat f = InterestNumberFormatFactory.INSTANCE.get("", Locale.ENGLISH,
+                                                                                Environment.getCurrentEnvironment());
+        final TemplateNumberModel m = () -> new BigDecimal("0.00025");
+        final Object result = f.formatToPlainText(m);
+        assertThat(result).isEqualTo("0.02%");
     }
 
     @Test

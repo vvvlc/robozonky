@@ -1,5 +1,5 @@
 /*
- * Copyright 2018 The RoboZonky Project
+ * Copyright 2019 The RoboZonky Project
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -18,13 +18,13 @@ package com.github.robozonky.strategy.natural.conditions;
 
 import org.junit.jupiter.api.Test;
 
-import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.*;
 
 class NeverAcceptingConditionTest {
 
     @Test
     void negate() {
-        final MarketplaceFilterCondition negated = NeverAceptingCondition.INSTANCE.invert();
+        final MarketplaceFilterCondition negated = NeverAceptingCondition.INSTANCE.negate();
         assertThat(negated).isEqualTo(AlwaysAcceptingCondition.INSTANCE);
     }
 

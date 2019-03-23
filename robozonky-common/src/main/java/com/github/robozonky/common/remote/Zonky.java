@@ -1,5 +1,5 @@
 /*
- * Copyright 2018 The RoboZonky Project
+ * Copyright 2019 The RoboZonky Project
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -18,6 +18,7 @@ package com.github.robozonky.common.remote;
 
 import java.time.LocalDate;
 import java.time.OffsetDateTime;
+import java.util.Collections;
 import java.util.List;
 import java.util.Optional;
 import java.util.function.Function;
@@ -30,14 +31,19 @@ import com.github.robozonky.api.remote.ControlApi;
 import com.github.robozonky.api.remote.LoanApi;
 import com.github.robozonky.api.remote.ParticipationApi;
 import com.github.robozonky.api.remote.PortfolioApi;
+import com.github.robozonky.api.remote.ReservationApi;
 import com.github.robozonky.api.remote.TransactionApi;
 import com.github.robozonky.api.remote.WalletApi;
 import com.github.robozonky.api.remote.entities.BlockedAmount;
+import com.github.robozonky.api.remote.entities.LastPublishedLoan;
 import com.github.robozonky.api.remote.entities.Participation;
 import com.github.robozonky.api.remote.entities.PurchaseRequest;
 import com.github.robozonky.api.remote.entities.RawDevelopment;
 import com.github.robozonky.api.remote.entities.RawInvestment;
 import com.github.robozonky.api.remote.entities.RawLoan;
+import com.github.robozonky.api.remote.entities.ReservationPreferences;
+import com.github.robozonky.api.remote.entities.ResolutionRequest;
+import com.github.robozonky.api.remote.entities.Resolutions;
 import com.github.robozonky.api.remote.entities.Restrictions;
 import com.github.robozonky.api.remote.entities.SellRequest;
 import com.github.robozonky.api.remote.entities.Statistics;
@@ -48,11 +54,15 @@ import com.github.robozonky.api.remote.entities.sanitized.Development;
 import com.github.robozonky.api.remote.entities.sanitized.Investment;
 import com.github.robozonky.api.remote.entities.sanitized.Loan;
 import com.github.robozonky.api.remote.entities.sanitized.MarketplaceLoan;
+import com.github.robozonky.api.remote.entities.sanitized.Reservation;
+import com.github.robozonky.api.remote.enums.Resolution;
 import com.github.robozonky.api.remote.enums.TransactionCategory;
 import com.github.robozonky.internal.api.Settings;
+import com.github.robozonky.internal.util.DateUtil;
 import com.github.rutledgepaulv.pagingstreams.PagingStreams;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
+import jdk.jfr.Event;
+import org.apache.logging.log4j.LogManager;
+import org.apache.logging.log4j.Logger;
 
 /**
  * Represents an instance of Zonky API that is fully authenticated and ready to perform operations on behalf of the
@@ -60,10 +70,11 @@ import org.slf4j.LoggerFactory;
  */
 public class Zonky {
 
-    private static final Logger LOGGER = LoggerFactory.getLogger(Zonky.class);
+    private static final Logger LOGGER = LogManager.getLogger(Zonky.class);
 
     private final Api<ControlApi> controlApi;
     private final Api<ExportApi> exports;
+    private final Api<ReservationApi> reservationApi;
     private final PaginatedApi<RawLoan, LoanApi> loanApi;
     private final PaginatedApi<Participation, ParticipationApi> participationApi;
     private final PaginatedApi<RawInvestment, PortfolioApi> portfolioApi;
@@ -75,6 +86,7 @@ public class Zonky {
         this.controlApi = api.control(tokenSupplier);
         this.exports = api.exports(tokenSupplier);
         this.loanApi = api.marketplace(tokenSupplier);
+        this.reservationApi = api.reservations(tokenSupplier);
         this.participationApi = api.secondaryMarketplace(tokenSupplier);
         this.portfolioApi = api.portfolio(tokenSupplier);
         this.walletApi = api.wallet(tokenSupplier);
@@ -104,27 +116,48 @@ public class Zonky {
     }
 
     public void invest(final Investment investment) {
-        LOGGER.info("Investing into loan #{}.", investment.getLoanId());
+        LOGGER.debug("Investing into loan #{}.", investment.getLoanId());
         controlApi.run(api -> api.invest(new RawInvestment(investment)));
     }
 
     public void cancel(final Investment investment) {
-        LOGGER.info("Cancelling offer to sell investment in loan #{}.", investment.getLoanId());
+        LOGGER.debug("Cancelling offer to sell investment in loan #{}.", investment.getLoanId());
         controlApi.run(api -> api.cancel(investment.getId()));
     }
 
     public void purchase(final Participation participation) {
-        LOGGER.info("Purchasing participation #{} in loan #{}.", participation.getId(), participation.getLoanId());
+        LOGGER.debug("Purchasing participation #{} in loan #{}.", participation.getId(), participation.getLoanId());
         controlApi.run(api -> api.purchase(participation.getId(), new PurchaseRequest(participation)));
     }
 
     public void sell(final Investment investment) {
-        LOGGER.info("Offering to sell investment in loan #{}.", investment.getLoanId());
+        LOGGER.debug("Offering to sell investment in loan #{}.", investment.getLoanId());
         controlApi.run(api -> api.offer(new SellRequest(new RawInvestment(investment))));
+    }
+
+    public void accept(final Reservation reservation) {
+        final ResolutionRequest r = new ResolutionRequest(reservation.getMyReservation().getId(), Resolution.ACCEPTED);
+        final Resolutions rs = new Resolutions(Collections.singleton(r));
+        controlApi.run(c -> c.accept(rs));
+    }
+
+    public void setReservationPreferences(final ReservationPreferences preferences) {
+        controlApi.run(c -> c.setReservationPreferences(preferences));
     }
 
     public Wallet getWallet() {
         return walletApi.execute(WalletApi::wallet);
+    }
+
+    /**
+     * Retrieve reservations that the user has to either accept or reject.
+     * @return All items from the remote API, lazy-loaded.
+     */
+    public Stream<Reservation> getPendingReservations() {
+        return reservationApi.call(ReservationApi::items)
+                .getReservations()
+                .stream()
+                .map(Reservation::sanitized);
     }
 
     /**
@@ -153,7 +186,7 @@ public class Zonky {
              */
             final Supplier<LocalDate> expectedPayment = () -> i.getNextPaymentDate()
                     .map(OffsetDateTime::toLocalDate)
-                    .orElse(LocalDate.now().minusDays(i.getDaysPastDue()));
+                    .orElse(DateUtil.localNow().toLocalDate()).minusDays(i.getDaysPastDue());
             final LocalDate lastPayment = getTransactions(i)
                     .filter(t -> t.getCategory() == TransactionCategory.PAYMENT)
                     .map(Transaction::getTransactionDate)
@@ -176,7 +209,13 @@ public class Zonky {
     }
 
     public Loan getLoan(final int id) {
-        return Loan.sanitized(loanApi.execute(api -> api.item(id)));
+        final Event event = new ZonkyLoanCallJfrEvent(); // may be triggered by the strategy and we want to measure that
+        try {
+            event.begin();
+            return Loan.sanitized(loanApi.execute(api -> api.item(id)));
+        } finally {
+            event.commit();
+        }
     }
 
     public Optional<Investment> getInvestment(final long id) {
@@ -187,6 +226,10 @@ public class Zonky {
     public Optional<Investment> getInvestmentByLoanId(final int loanId) {
         final Select s = new Select().equals("loan.id", loanId);
         return getInvestments(s).findFirst();
+    }
+
+    public LastPublishedLoan getLastPublishedLoanInfo() {
+        return loanApi.execute(LoanApi::lastPublished);
     }
 
     /**
@@ -233,6 +276,10 @@ public class Zonky {
      */
     public Stream<Participation> getAvailableParticipations(final Select select) {
         return getStream(participationApi, ParticipationApi::items, select);
+    }
+
+    public ReservationPreferences getReservationPreferences() {
+        return reservationApi.call(ReservationApi::preferences);
     }
 
     public void requestWalletExport() {

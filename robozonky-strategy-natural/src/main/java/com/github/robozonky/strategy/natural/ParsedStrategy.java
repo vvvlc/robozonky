@@ -1,5 +1,5 @@
 /*
- * Copyright 2018 The RoboZonky Project
+ * Copyright 2019 The RoboZonky Project
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -29,13 +29,15 @@ import com.github.robozonky.api.remote.enums.Rating;
 import com.github.robozonky.api.strategies.InvestmentDescriptor;
 import com.github.robozonky.api.strategies.LoanDescriptor;
 import com.github.robozonky.api.strategies.ParticipationDescriptor;
+import com.github.robozonky.api.strategies.ReservationDescriptor;
+import com.github.robozonky.api.strategies.ReservationMode;
 import com.github.robozonky.strategy.natural.conditions.MarketplaceFilter;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
+import org.apache.logging.log4j.LogManager;
+import org.apache.logging.log4j.Logger;
 
 class ParsedStrategy {
 
-    private static final Logger LOGGER = LoggerFactory.getLogger(ParsedStrategy.class);
+    private static final Logger LOGGER = LogManager.getLogger(ParsedStrategy.class);
 
     private final DefaultValues defaults;
     private final Map<Rating, PortfolioShare> portfolio;
@@ -149,17 +151,21 @@ class ParsedStrategy {
         return getInvestmentSize(rating).getMaximumInvestmentInCzk();
     }
 
-    public Stream<LoanDescriptor> getApplicableLoans(final Collection<LoanDescriptor> l) {
-        if (!isInvestingEnabled()) {
-            return Stream.empty();
-        }
-        return l.parallelStream()
-                .map(Wrapper::wrap)
+    private <T> Stream<T> getApplicable(final Stream<Wrapper<T>> wrappers) {
+        return wrappers
                 .filter(w -> !matchesFilter(w, filters.getPrimaryMarketplaceFilters(),
                                             "{} to be ignored as it matched primary marketplace filter {}."))
                 .filter(w -> !matchesFilter(w, filters.getSellFilters(),
                                             "{} to be ignored as it matched sell filter {}."))
                 .map(Wrapper::getOriginal);
+    }
+
+    public Stream<LoanDescriptor> getApplicableLoans(final Collection<LoanDescriptor> l) {
+        return getApplicable(l.parallelStream().map(Wrapper::wrap));
+    }
+
+    public Stream<ReservationDescriptor> getApplicableReservations(final Collection<ReservationDescriptor> r) {
+        return getApplicable(r.parallelStream().map(Wrapper::wrap));
     }
 
     public Stream<ParticipationDescriptor> getApplicableParticipations(final Collection<ParticipationDescriptor> p) {
@@ -185,6 +191,10 @@ class ParsedStrategy {
 
     public boolean isInvestingEnabled() {
         return filters.isPrimaryMarketplaceEnabled();
+    }
+
+    public Optional<ReservationMode> getReservationMode() {
+        return defaults.getReservationMode();
     }
 
     public Stream<InvestmentDescriptor> getApplicableInvestments(final Collection<InvestmentDescriptor> i) {

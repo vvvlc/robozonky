@@ -1,5 +1,5 @@
 /*
- * Copyright 2018 The RoboZonky Project
+ * Copyright 2019 The RoboZonky Project
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -16,15 +16,18 @@
 
 package com.github.robozonky.strategy.natural;
 
-import java.time.LocalDate;
 import java.time.Period;
+import java.util.Optional;
 
 import com.github.robozonky.api.strategies.LoanDescriptor;
+import com.github.robozonky.api.strategies.ReservationMode;
+import com.github.robozonky.internal.util.DateUtil;
 import com.github.robozonky.strategy.natural.conditions.MarketplaceFilterCondition;
 
 class DefaultValues {
 
     private final DefaultPortfolio portfolio;
+    private ReservationMode reservationMode = null;
     private long targetPortfolioSize = Long.MAX_VALUE;
     private long minimumBalance = 0;
     private InvestmentSize investmentSize = new InvestmentSize();
@@ -38,6 +41,14 @@ class DefaultValues {
 
     public DefaultPortfolio getPortfolio() {
         return portfolio;
+    }
+
+    public Optional<ReservationMode> getReservationMode() {
+        return Optional.ofNullable(reservationMode);
+    }
+
+    public void setReservationMode(final ReservationMode reservationMode) {
+        this.reservationMode = reservationMode;
     }
 
     public long getMinimumBalance() {
@@ -56,7 +67,7 @@ class DefaultValues {
         if (exitProperties == null) {
             return false;
         } else {
-            return exitProperties.getSelloffStart().isBefore(LocalDate.now());
+            return exitProperties.getSelloffStart().isBefore(DateUtil.localNow().toLocalDate());
         }
     }
 
@@ -64,7 +75,8 @@ class DefaultValues {
         if (exitProperties == null) {
             return -1;
         } else {
-            return Math.max(0, Period.between(LocalDate.now(), exitProperties.getAccountTermination()).toTotalMonths());
+            return Math.max(0, Period.between(DateUtil.localNow().toLocalDate(),
+                                              exitProperties.getAccountTermination()).toTotalMonths());
         }
     }
 
@@ -113,6 +125,7 @@ class DefaultValues {
     public String toString() {
         return "DefaultValues{" +
                 "portfolio=" + portfolio +
+                ",reservationMode=" + reservationMode +
                 ", targetPortfolioSize=" + targetPortfolioSize +
                 ", minimumBalance=" + minimumBalance +
                 ", investmentSize=" + investmentSize +

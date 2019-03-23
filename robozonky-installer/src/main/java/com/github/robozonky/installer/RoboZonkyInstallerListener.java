@@ -1,5 +1,5 @@
 /*
- * Copyright 2018 The RoboZonky Project
+ * Copyright 2019 The RoboZonky Project
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -41,8 +41,8 @@ import com.izforge.izpack.api.event.AbstractInstallerListener;
 import com.izforge.izpack.api.event.ProgressListener;
 import org.apache.commons.io.FileUtils;
 import org.apache.commons.lang3.SystemUtils;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
+import org.apache.logging.log4j.LogManager;
+import org.apache.logging.log4j.Logger;
 
 import static com.github.robozonky.integrations.stonky.Properties.GOOGLE_CALLBACK_HOST;
 import static com.github.robozonky.integrations.stonky.Properties.GOOGLE_CALLBACK_PORT;
@@ -51,7 +51,7 @@ import static com.github.robozonky.integrations.stonky.Properties.GOOGLE_LOCAL_F
 public final class RoboZonkyInstallerListener extends AbstractInstallerListener {
 
     static final char[] KEYSTORE_PASSWORD = UUID.randomUUID().toString().toCharArray();
-    private static final Logger LOGGER = LoggerFactory.getLogger(RoboZonkyInstallerListener.class);
+    private static final Logger LOGGER = LogManager.getLogger(RoboZonkyInstallerListener.class);
     static File INSTALL_PATH, DIST_PATH, KEYSTORE_FILE, JMX_PROPERTIES_FILE, EMAIL_CONFIG_FILE, SETTINGS_FILE,
             CLI_CONFIG_FILE, LOGBACK_CONFIG_FILE;
     private static InstallData DATA;
@@ -63,10 +63,6 @@ public final class RoboZonkyInstallerListener extends AbstractInstallerListener 
         } else if (SystemUtils.IS_OS_WINDOWS) {
             operatingSystem = RoboZonkyInstallerListener.OS.WINDOWS;
         }
-    }
-
-    RoboZonkyInstallerListener.OS getOperatingSystem() {
-        return operatingSystem;
     }
 
     /**
@@ -124,13 +120,18 @@ public final class RoboZonkyInstallerListener extends AbstractInstallerListener 
         f.setup();
     }
 
-    private static CommandLinePart prepareCore(final char... keystorePassword) throws SetupFailedException, IOException {
+    private static CommandLinePart prepareCore(
+            final char... keystorePassword) throws SetupFailedException, IOException {
         final String zonkoidId = "zonkoid";
         final CommandLinePart cli = new CommandLinePart()
                 .setOption("-p", String.valueOf(keystorePassword));
         cli.setOption("-g", KEYSTORE_FILE.getAbsolutePath());
         if (Boolean.valueOf(Variables.IS_DRY_RUN.getValue(DATA))) {
             cli.setOption("-d");
+            cli.setJvmArgument("Xmx128m"); // more memory for the JFR recording
+            cli.setJvmArgument("XX:StartFlightRecording=disk=true,dumponexit=true,maxage=1d,path-to-gc-roots=true");
+        } else {
+            cli.setJvmArgument("Xmx64m");
         }
         primeKeyStore(keystorePassword);
         final boolean isZonkoidEnabled = Boolean.parseBoolean(Variables.IS_ZONKOID_ENABLED.getValue(DATA));
@@ -217,7 +218,7 @@ public final class RoboZonkyInstallerListener extends AbstractInstallerListener 
         props.setProperty("com.sun.management.jmxremote.port", port);
         try {
             Util.writeOutProperties(props, JMX_PROPERTIES_FILE);
-        } catch (final IOException ex) {
+        } catch (final Exception ex) {
             throw new IllegalStateException("Failed writing JMX configuration.", ex);
         }
         // configure JMX to read the props file
@@ -231,10 +232,9 @@ public final class RoboZonkyInstallerListener extends AbstractInstallerListener 
 
     private static CommandLinePart prepareCommandLine(final CommandLinePart strategy, final CommandLinePart emailConfig,
                                                       final CommandLinePart stonky, final CommandLinePart jmxConfig,
-                                                      final CommandLinePart credentials,
-                                                      final CommandLinePart logging) {
+                                                      final CommandLinePart core, final CommandLinePart logging) {
         try {
-            final File cliConfigFile = assembleCliFile(credentials, strategy, emailConfig);
+            final File cliConfigFile = assembleCliFile(core, strategy, emailConfig);
             // have the CLI file loaded during RoboZonky startup
             final CommandLinePart commandLine = new CommandLinePart()
                     .setOption("@" + cliConfigFile.getAbsolutePath())
@@ -242,7 +242,7 @@ public final class RoboZonkyInstallerListener extends AbstractInstallerListener 
                     .setEnvironmentVariable("JAVA_HOME", "");
             // now proceed to set all system properties and settings
             final Properties settings = new Properties();
-            Util.processCommandLine(commandLine, settings, strategy, stonky, jmxConfig, credentials, logging);
+            Util.processCommandLine(commandLine, settings, strategy, stonky, jmxConfig, core, logging);
             // write settings to a file
             Util.writeOutProperties(settings, SETTINGS_FILE);
             return commandLine;
@@ -285,16 +285,13 @@ public final class RoboZonkyInstallerListener extends AbstractInstallerListener 
                 google.runGoogleCredentialCheck();
                 LOGGER.debug("Credential check over.");
                 // copy credentials to the correct directory
-                final String dirName = GOOGLE_LOCAL_FOLDER.getValue()
-                        .orElseThrow(() -> new IllegalStateException("Not possible."));
-                final File source = new File(dirName);
-                if (!source.isDirectory()) {
-                    throw new IllegalStateException("Google credentials folder was not created.");
-                }
-                final File target = new File(INSTALL_PATH, dirName);
+                final File source = GOOGLE_LOCAL_FOLDER.getValue()
+                        .map(File::new)
+                        .filter(File::isDirectory)
+                        .orElseThrow(() -> new IllegalStateException("Google credentials folder is not proper."));
+                final File target = new File(INSTALL_PATH, source.getName());
                 LOGGER.debug("Will copy {} to {}.", source, target);
-                FileUtils.copyDirectory(source, target);
-                FileUtils.deleteDirectory(source);
+                FileUtils.moveDirectory(source, target);
             }
             return cli;
         } catch (final Exception ex) {
@@ -302,11 +299,11 @@ public final class RoboZonkyInstallerListener extends AbstractInstallerListener 
         }
     }
 
+    RoboZonkyInstallerListener.OS getOperatingSystem() {
+        return operatingSystem;
+    }
+
     private void prepareRunScript(final CommandLinePart commandLine) {
-        if (System.getProperty("java.version").startsWith("1.8")) { // use G1GC on Java 8
-            commandLine.setJvmArgument("XX:+UseG1GC");
-        }
-        commandLine.setJvmArgument("Xmx32m");
         final RunScriptGenerator generator = operatingSystem == RoboZonkyInstallerListener.OS.WINDOWS ?
                 RunScriptGenerator.forWindows(DIST_PATH, CLI_CONFIG_FILE)
                 : RunScriptGenerator.forUnix(DIST_PATH, CLI_CONFIG_FILE);
@@ -334,12 +331,11 @@ public final class RoboZonkyInstallerListener extends AbstractInstallerListener 
             progressListener.nextStep("Příprava nastavení JMX.", 4, 1);
             final CommandLinePart jmx = prepareJmx();
             progressListener.nextStep("Příprava nastavení Zonky.", 5, 1);
-            final CommandLinePart credentials = prepareCore();
+            final CommandLinePart core = prepareCore();
             progressListener.nextStep("Příprava nastavení logování.", 6, 1);
             final CommandLinePart logging = prepareLogging();
             progressListener.nextStep("Generování parametrů příkazové řádky.", 7, 1);
-            final CommandLinePart result = prepareCommandLine(strategyConfig, emailConfig, stonky, jmx, credentials,
-                                                              logging);
+            final CommandLinePart result = prepareCommandLine(strategyConfig, emailConfig, stonky, jmx, core, logging);
             progressListener.nextStep("Generování spustitelného souboru.", 8, 1);
             prepareRunScript(result);
             progressListener.stopAction();

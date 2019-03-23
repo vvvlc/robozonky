@@ -18,12 +18,12 @@ package com.github.robozonky.notifications.templates;
 
 import java.io.IOException;
 import java.io.StringWriter;
-import java.time.Instant;
 import java.util.Collections;
 import java.util.Date;
 import java.util.Map;
 
 import com.github.robozonky.internal.api.Defaults;
+import com.github.robozonky.internal.util.DateUtil;
 import com.github.robozonky.internal.util.Maps;
 import com.github.robozonky.notifications.templates.html.HtmlTemplate;
 import com.github.robozonky.notifications.templates.plaintext.PlainTextTemplate;
@@ -48,15 +48,22 @@ public enum TemplateProcessor {
         cfg.setCustomNumberFormats(customNumberFormats);
         cfg.setClassForTemplateLoading(templateRoot, "");
         cfg.setLogTemplateExceptions(false);
+        /*
+         * This is important! We don't control installer's encoding, it will always be selected by the user running the
+         * installer. Since templates are encoded in UTF-8, and e-mails are sent in UTF-8, we must set this here so that
+         * the templates are read properly and installer e-mails are proper.
+         *
+         * This is not a problem within the daemon itself, since that will be run after the installer is run. And the
+         * installer will enforce that the correct encoding is used when the daemon is run.
+         */
         cfg.setDefaultEncoding(Defaults.CHARSET.displayName());
         return cfg;
     }
 
-    private String process(final Configuration configuration, final String embeddedTemplate,
-                           final Map<String, Object> embeddedData)
-            throws IOException, TemplateException {
+    private static String process(final Configuration configuration, final String embeddedTemplate,
+                                  final Map<String, Object> embeddedData) throws IOException, TemplateException {
         final Map<String, Object> data = Maps.ofEntries(
-                entry("timestamp", Date.from(Instant.now())),
+                entry("timestamp", Date.from(DateUtil.now())),
                 entry("robozonkyUrl", Defaults.ROBOZONKY_URL),
                 entry("embed", embeddedTemplate),
                 entry("data", embeddedData));

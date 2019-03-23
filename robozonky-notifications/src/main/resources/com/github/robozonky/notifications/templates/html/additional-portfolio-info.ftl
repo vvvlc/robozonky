@@ -1,8 +1,8 @@
-<h2>Aktuální situace na <@zonky /> účtu</h2>
+<h2>Situace na <@zonky /> účtu k ${data.portfolio.timestamp?time?iso_local_ms_nz}</h2>
 <table>
   <thead>
     <tr>
-        <th style="padding: 5px; text-align: right;">Rating</th>
+        <th style="padding: 5px; text-align: right;">Úrok</th>
         <th style="padding: 5px;" colspan="2">Investováno</th>
         <th style="padding: 5px;" colspan="2">Ohroženo</th>
     </tr>

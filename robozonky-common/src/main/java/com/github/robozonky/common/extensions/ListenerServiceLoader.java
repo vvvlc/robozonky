@@ -1,5 +1,5 @@
 /*
- * Copyright 2018 The RoboZonky Project
+ * Copyright 2019 The RoboZonky Project
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -28,16 +28,16 @@ import com.github.robozonky.api.notifications.Event;
 import com.github.robozonky.api.notifications.EventListenerSupplier;
 import com.github.robozonky.api.notifications.ListenerService;
 import com.github.robozonky.common.state.TenantState;
-import com.github.robozonky.internal.util.LazyInitialized;
 import com.github.robozonky.util.StreamUtil;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
+import io.vavr.Lazy;
+import org.apache.logging.log4j.LogManager;
+import org.apache.logging.log4j.Logger;
 
 public final class ListenerServiceLoader {
 
     private static final String CONFIG_LOCATION_PROPERTY = "configLocation";
-    private static final Logger LOGGER = LoggerFactory.getLogger(ListenerServiceLoader.class);
-    private static final LazyInitialized<ServiceLoader<ListenerService>> LOADER =
+    private static final Logger LOGGER = LogManager.getLogger(ListenerServiceLoader.class);
+    private static final Lazy<ServiceLoader<ListenerService>> LOADER =
             ExtensionsManager.INSTANCE.getServiceLoader(ListenerService.class);
 
     private ListenerServiceLoader() {
@@ -54,16 +54,6 @@ public final class ListenerServiceLoader {
         return TenantState.of(session)
                 .in(ListenerService.class)
                 .getValue(CONFIG_LOCATION_PROPERTY);
-    }
-
-    /**
-     * Make sure the location for notifications configuration is stored for a given tenant. This is to work around the
-     * fact that there is no way how to pass properties to robozonky-notifications, due to them being service-loaded.
-     * @param username Tenant in question.
-     * @param configurationLocation Location of notification configuration.
-     */
-    public static void registerConfiguration(final String username, final URL configurationLocation) {
-        registerConfiguration(new SessionInfo(username), configurationLocation);
     }
 
     /**

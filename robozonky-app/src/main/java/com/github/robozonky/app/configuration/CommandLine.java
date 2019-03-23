@@ -1,5 +1,5 @@
 /*
- * Copyright 2018 The RoboZonky Project
+ * Copyright 2019 The RoboZonky Project
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -23,11 +23,12 @@ import java.time.Duration;
 import java.util.Objects;
 import java.util.Optional;
 import java.util.concurrent.Callable;
-import java.util.function.Consumer;
+import java.util.function.Supplier;
 
 import com.github.robozonky.app.App;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
+import com.github.robozonky.app.runtime.Lifecycle;
+import org.apache.logging.log4j.LogManager;
+import org.apache.logging.log4j.Logger;
 
 /**
  * Converts command line into application configuration using {@link picocli.CommandLine}.
@@ -35,8 +36,8 @@ import org.slf4j.LoggerFactory;
 @picocli.CommandLine.Command(name = "robozonky(.sh|.bat)")
 public class CommandLine implements Callable<Optional<InvestmentMode>> {
 
-    private static final Logger LOGGER = LoggerFactory.getLogger(CommandLine.class);
-    private final Consumer<Throwable> shutdownCall;
+    private static final Logger LOGGER = LogManager.getLogger(CommandLine.class);
+    private final Supplier<Lifecycle> lifecycle;
     @picocli.CommandLine.Option(names = {"-s", "--strategy"}, required = true,
             description = "Points to a resource holding the investment strategy configuration.")
     String strategyLocation = "";
@@ -59,15 +60,15 @@ public class CommandLine implements Callable<Optional<InvestmentMode>> {
     @picocli.CommandLine.Option(names = {"-g", "--guarded"},
             description = "Path to secure file that contains username, password etc.", required = true)
     private File keystore = null;
-    @picocli.CommandLine.Option(names = {"-w", "--wait-primary", "--wait"},
-            description = "Number of seconds between consecutive checks of primary marketplace.")
-    private int primaryMarketplaceCheckDelay = 5;
     @picocli.CommandLine.Option(names = {"-ws", "--wait-secondary"},
             description = "Number of seconds between consecutive checks of secondary marketplace.")
-    private int secondaryMarketplaceCheckDelay = primaryMarketplaceCheckDelay;
+    private int secondaryMarketplaceCheckDelay = 1;
 
-    public CommandLine(final Consumer<Throwable> shutdownCall) {
-        this.shutdownCall = shutdownCall;
+    public CommandLine(final Supplier<Lifecycle> lifecycle) {
+        this.lifecycle = lifecycle;
+        // for backwards compatibility with RoboZonky 4.x, which used JCommander
+        System.setProperty("picocli.trimQuotes", "true");
+        System.setProperty("picocli.useSimplifiedAtFiles", "true");
     }
 
     /**
@@ -77,24 +78,21 @@ public class CommandLine implements Callable<Optional<InvestmentMode>> {
      * @return Present if the arguments resulted in a valid configuration, empty otherwise.
      */
     public static Optional<InvestmentMode> parse(final App main) {
-        final CommandLine cli = new CommandLine(main::resumeToFail);
+        // parse the arguments
+        final CommandLine cli = new CommandLine(main::getLifecycle);
         final Optional<InvestmentMode> result = picocli.CommandLine.call(cli, main.getArgs());
         return Objects.isNull(result) ? Optional.empty() : result;
     }
 
-    public Duration getPrimaryMarketplaceCheckDelay() {
-        return Duration.ofSeconds(primaryMarketplaceCheckDelay);
-    }
-
-    public Duration getSecondaryMarketplaceCheckDelay() {
+    Duration getSecondaryMarketplaceCheckDelay() {
         return Duration.ofSeconds(secondaryMarketplaceCheckDelay);
     }
 
-    public Optional<String> getConfirmationCredentials() {
+    Optional<String> getConfirmationCredentials() {
         return Optional.ofNullable(confirmationCredentials);
     }
 
-    public boolean isDryRunEnabled() {
+    boolean isDryRunEnabled() {
         return dryRunEnabled;
     }
 
@@ -120,11 +118,11 @@ public class CommandLine implements Callable<Optional<InvestmentMode>> {
         }
     }
 
-    public char[] getPassword() {
+    char[] getPassword() {
         return password.toCharArray();
     }
 
-    public Optional<File> getKeystore() {
+    Optional<File> getKeystore() {
         return Optional.ofNullable(keystore);
     }
 
@@ -134,7 +132,7 @@ public class CommandLine implements Callable<Optional<InvestmentMode>> {
 
     @Override
     public Optional<InvestmentMode> call() {
-        final OperatingMode mode = new OperatingMode(shutdownCall);
+        final OperatingMode mode = new OperatingMode(lifecycle);
         return SecretProviderFactory.getSecretProvider(this)
                 .flatMap(secrets -> mode.configure(this, secrets));
     }

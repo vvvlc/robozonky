@@ -1,5 +1,5 @@
 /*
- * Copyright 2018 The RoboZonky Project
+ * Copyright 2019 The RoboZonky Project
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -26,13 +26,14 @@ import java.util.function.Consumer;
 
 import com.github.robozonky.app.ReturnCode;
 import com.github.robozonky.app.ShutdownHook;
+import com.github.robozonky.test.AbstractRoboZonkyTest;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.function.Executable;
 
-import static org.assertj.core.api.Assertions.assertThat;
-import static org.assertj.core.api.Assertions.assertThatThrownBy;
+import static org.assertj.core.api.Assertions.*;
+import static org.junit.jupiter.api.Assertions.assertTimeout;
 
-class ShutdownEnablerTest {
+class ShutdownEnablerTest extends AbstractRoboZonkyTest {
 
     @Test
     void standard() {
@@ -43,9 +44,9 @@ class ShutdownEnablerTest {
                 .isInstanceOf(TimeoutException.class); // the thread is blocked
         final Consumer<ShutdownHook.Result> c = se.get()
                 .orElseThrow(() -> new IllegalStateException("Should have returned."));
-        c.accept(new ShutdownHook.Result(ReturnCode.OK, null)); // this unblocks the thread
+        c.accept(new ShutdownHook.Result(ReturnCode.OK)); // this unblocks the thread
         // this should return
-        org.junit.jupiter.api.Assertions.assertTimeout(Duration.ofSeconds(5), (Executable) f::get);
+        assertTimeout(Duration.ofSeconds(5), (Executable) f::get);
         assertThat(f).isDone();
         e.shutdownNow();
     }

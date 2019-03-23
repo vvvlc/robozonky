@@ -1,5 +1,5 @@
 /*
- * Copyright 2017 The RoboZonky Project
+ * Copyright 2019 The RoboZonky Project
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -21,19 +21,28 @@ import java.io.IOException;
 
 import com.github.robozonky.internal.api.Defaults;
 import org.apache.http.HttpEntity;
+import org.apache.logging.log4j.LogManager;
+import org.apache.logging.log4j.Logger;
 
 final class Util {
+
+    private static final Logger LOGGER = LogManager.getLogger(Util.class);
 
     private Util() {
         // no instances
     }
 
     public static String readEntity(final HttpEntity entity) {
+        if (entity == null) {
+            LOGGER.debug("Zonkoid sent an empty response.");
+            return null;
+        }
         final ByteArrayOutputStream outstream = new ByteArrayOutputStream(); // no need to close this one
         try {
             entity.writeTo(outstream);
             return outstream.toString(Defaults.CHARSET.displayName());
-        } catch (final IOException e) { // don't even log the exception as it's entirely uninteresting
+        } catch (final IOException ex) {
+            LOGGER.debug("Failed reading Zonkoid response.", ex);
             return null;
         }
     }

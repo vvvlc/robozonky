@@ -1,5 +1,5 @@
 /*
- * Copyright 2018 The RoboZonky Project
+ * Copyright 2019 The RoboZonky Project
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -22,10 +22,10 @@ import java.util.ServiceLoader;
 import java.util.UUID;
 
 import com.github.robozonky.api.notifications.ListenerService;
-import com.github.robozonky.internal.util.LazyInitialized;
+import io.vavr.Lazy;
 import org.junit.jupiter.api.Test;
 
-import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.*;
 
 class ExtensionsManagerTest {
 
@@ -39,7 +39,7 @@ class ExtensionsManagerTest {
 
     @Test
     void noExtensionsWithFolderPresent() {
-        final LazyInitialized<ServiceLoader<ListenerService>> result =
+        final Lazy<ServiceLoader<ListenerService>> result =
                 ExtensionsManager.INSTANCE.getServiceLoader(ListenerService.class);
         assertThat(result.get()).isNotNull();
     }
@@ -60,16 +60,11 @@ class ExtensionsManagerTest {
     }
 
     @Test
-    void loadJarsFromFolderWithJars() {
-        final File f = ExtensionsManagerTest.getFolder("target");
-        assertThat(ExtensionsManager.INSTANCE.retrieveExtensionClassLoader(f))
-                .isInstanceOf(URLClassLoader.class);
-    }
-
-    @Test
     void loadJarsFromFolderWithNoJars() {
         final File f = ExtensionsManagerTest.getFolder("src");
-        assertThat(ExtensionsManager.INSTANCE.retrieveExtensionClassLoader(f))
-                .isInstanceOf(URLClassLoader.class);
+        final ClassLoader classLoader = ExtensionsManager.INSTANCE.retrieveExtensionClassLoader(f);
+        assertThat(classLoader).isInstanceOf(URLClassLoader.class);
+        final URLClassLoader urlClassLoader = (URLClassLoader) classLoader;
+        assertThat(urlClassLoader.getURLs()).isEmpty();
     }
 }

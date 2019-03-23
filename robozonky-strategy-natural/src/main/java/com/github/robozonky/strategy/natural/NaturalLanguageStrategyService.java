@@ -1,5 +1,5 @@
 /*
- * Copyright 2018 The RoboZonky Project
+ * Copyright 2019 The RoboZonky Project
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -24,17 +24,18 @@ import java.util.function.Function;
 
 import com.github.robozonky.api.strategies.InvestmentStrategy;
 import com.github.robozonky.api.strategies.PurchaseStrategy;
+import com.github.robozonky.api.strategies.ReservationStrategy;
 import com.github.robozonky.api.strategies.SellStrategy;
 import com.github.robozonky.api.strategies.StrategyService;
 import com.github.robozonky.internal.api.Defaults;
 import org.antlr.v4.runtime.CharStream;
 import org.antlr.v4.runtime.CharStreams;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
+import org.apache.logging.log4j.LogManager;
+import org.apache.logging.log4j.Logger;
 
 public class NaturalLanguageStrategyService implements StrategyService {
 
-    private static final Logger LOGGER = LoggerFactory.getLogger(NaturalLanguageStrategyService.class);
+    private static final Logger LOGGER = LogManager.getLogger(NaturalLanguageStrategyService.class);
     private static final AtomicReference<Map<String, ParsedStrategy>> CACHE =
             new AtomicReference<>(Collections.emptyMap());
 
@@ -95,5 +96,12 @@ public class NaturalLanguageStrategyService implements StrategyService {
     @Override
     public Optional<PurchaseStrategy> toPurchase(final String strategy) {
         return getStrategy(strategy, s -> s.isPurchasingEnabled() ? new NaturalLanguagePurchaseStrategy(s) : null);
+    }
+
+    @Override
+    public Optional<ReservationStrategy> forReservations(final String strategy) {
+        return getStrategy(strategy, s -> s.getReservationMode().isPresent() ?
+                new NaturalLanguageReservationStrategy(s) :
+                null);
     }
 }

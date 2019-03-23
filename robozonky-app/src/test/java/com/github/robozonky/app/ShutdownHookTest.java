@@ -1,5 +1,5 @@
 /*
- * Copyright 2018 The RoboZonky Project
+ * Copyright 2019 The RoboZonky Project
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -19,18 +19,14 @@ package com.github.robozonky.app;
 import java.util.Optional;
 import java.util.function.Consumer;
 
+import com.github.robozonky.test.AbstractRoboZonkyTest;
 import org.junit.jupiter.api.Test;
 
-import static org.assertj.core.api.Assertions.assertThat;
-import static org.assertj.core.api.Assertions.assertThatThrownBy;
-import static org.assertj.core.api.Assertions.fail;
+import static org.assertj.core.api.Assertions.*;
 import static org.mockito.ArgumentMatchers.eq;
-import static org.mockito.Mockito.doThrow;
-import static org.mockito.Mockito.mock;
-import static org.mockito.Mockito.verify;
-import static org.mockito.Mockito.when;
+import static org.mockito.Mockito.*;
 
-class ShutdownHookTest {
+class ShutdownHookTest extends AbstractRoboZonkyTest {
 
     @Test
     void noShutdownHandler() {
@@ -39,7 +35,7 @@ class ShutdownHookTest {
         final ShutdownHook s = new ShutdownHook();
         assertThat(s.register(h)).isFalse();
         try {
-            s.execute(new ShutdownHook.Result(ReturnCode.OK, null));
+            s.execute(new ShutdownHook.Result(ReturnCode.OK));
         } catch (final RuntimeException ex) {
             fail("Should not have been thrown.", ex);
         }
@@ -67,7 +63,7 @@ class ShutdownHookTest {
         final ShutdownHook s = new ShutdownHook();
         assertThat(s.register(h)).isTrue();
         try {
-            s.execute(new ShutdownHook.Result(ReturnCode.OK, null));
+            s.execute(new ShutdownHook.Result(ReturnCode.OK));
         } catch (final RuntimeException ex) {
             fail("Should not have been thrown.", ex);
         }
@@ -81,7 +77,7 @@ class ShutdownHookTest {
         when(h.get()).thenReturn(Optional.of(c));
         final ShutdownHook s = new ShutdownHook();
         assertThat(s.register(h)).isTrue();
-        final ShutdownHook.Result r = new ShutdownHook.Result(ReturnCode.OK, null);
+        final ShutdownHook.Result r = new ShutdownHook.Result(ReturnCode.OK);
         s.execute(r);
         verify(c).accept(eq(r));
     }

@@ -1,5 +1,5 @@
 /*
- * Copyright 2018 The RoboZonky Project
+ * Copyright 2019 The RoboZonky Project
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -32,11 +32,6 @@ class AbstractValidatorTest {
         }
 
         @Override
-        public String getWarningMessageId() {
-            return null;
-        }
-
-        @Override
         protected DataValidator.Status validateDataPossiblyThrowingException(final InstallData installData) {
             throw new IllegalStateException();
         }
@@ -46,5 +41,6 @@ class AbstractValidatorTest {
     void doesNotThrow() {
         final AbstractValidator v = new TestValidator();
         assertThat(v.validateData(null)).isEqualTo(DataValidator.Status.ERROR);
+        assertThat(v.getWarningMessageId()).isEmpty();
     }
 }

@@ -1,5 +1,5 @@
 /*
- * Copyright 2017 The RoboZonky Project
+ * Copyright 2019 The RoboZonky Project
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -27,7 +27,7 @@ import org.junit.jupiter.api.Disabled;
 import org.junit.jupiter.api.Test;
 
 import static org.assertj.core.api.Assertions.*;
-import static org.assertj.core.api.SoftAssertions.*;
+import static org.assertj.core.api.SoftAssertions.assertSoftly;
 
 class LoanDescriptorTest {
 
@@ -40,7 +40,7 @@ class LoanDescriptorTest {
                 .setId(1)
                 .setRating(r)
                 .setAmount(2000)
-                .setRemainingInvestment(1000)
+                .setNonReservedRemainingInvestment(1000)
                 .setDatePublished(OffsetDateTime.now())
                 .build();
     }
@@ -97,7 +97,8 @@ class LoanDescriptorTest {
     void recommendWrongAmount() {
         final Loan mockedLoan = LoanDescriptorTest.mockLoan();
         final LoanDescriptor ld = new LoanDescriptor(mockedLoan);
-        final Optional<RecommendedLoan> r = ld.recommend(BigDecimal.valueOf(mockedLoan.getRemainingInvestment() + 1));
+        final Optional<RecommendedLoan> r =
+                ld.recommend(BigDecimal.valueOf(mockedLoan.getNonReservedRemainingInvestment() + 1));
         assertThat(r).isEmpty();
     }
 }

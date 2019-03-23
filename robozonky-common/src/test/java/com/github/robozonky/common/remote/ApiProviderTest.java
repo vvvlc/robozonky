@@ -1,5 +1,5 @@
 /*
- * Copyright 2018 The RoboZonky Project
+ * Copyright 2019 The RoboZonky Project
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -22,11 +22,8 @@ import java.util.function.Function;
 import com.github.robozonky.api.remote.entities.ZonkyApiToken;
 import org.junit.jupiter.api.Test;
 
-import static org.assertj.core.api.Assertions.assertThat;
-import static org.mockito.Mockito.mock;
-import static org.mockito.Mockito.spy;
-import static org.mockito.Mockito.verify;
-import static org.mockito.Mockito.when;
+import static org.assertj.core.api.Assertions.*;
+import static org.mockito.Mockito.*;
 
 class ApiProviderTest {
 
@@ -49,6 +46,17 @@ class ApiProviderTest {
 
     @Test
     void authenticatedProperlyClosed() {
+        final ApiProvider p = spy(new ApiProvider());
+        try (final ApiProvider provider = p) {
+            final Zonky result = provider.call(Function.identity(), ApiProviderTest::mockToken);
+            assertThat(result).isNotNull();
+        }
+        verify(p).close();
+        assertThat(p.isClosed()).isTrue();
+    }
+
+    @Test
+    void marketplace() {
         final ApiProvider p = spy(new ApiProvider());
         try (final ApiProvider provider = p) {
             final Zonky result = provider.call(Function.identity(), ApiProviderTest::mockToken);

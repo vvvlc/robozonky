@@ -1,5 +1,5 @@
 /*
- * Copyright 2018 The RoboZonky Project
+ * Copyright 2019 The RoboZonky Project
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -28,11 +28,9 @@ import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.Assumptions;
 import org.junit.jupiter.api.Test;
 
-import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.*;
 import static org.assertj.core.api.SoftAssertions.assertSoftly;
-import static org.mockito.Mockito.eq;
-import static org.mockito.Mockito.mock;
-import static org.mockito.Mockito.when;
+import static org.mockito.Mockito.*;
 
 class StrategySettingsValidatorTest {
 
@@ -95,10 +93,22 @@ class StrategySettingsValidatorTest {
     }
 
     @Test
-    void allOk() throws IOException {
+    void fileOk() throws IOException {
         final File f = File.createTempFile("robozonky-", ".cfg");
         Files.write(f.toPath(), "Robot má udržovat konzervativní portfolio.".getBytes(Defaults.CHARSET));
         final InstallData d = StrategySettingsValidatorTest.mockInstallData(f);
+        // execute sut
+        final DataValidator validator = new StrategySettingsValidator();
+        final DataValidator.Status result = validator.validateData(d);
+        // execute test
+        assertThat(result).isEqualTo(DataValidator.Status.OK);
+    }
+
+    @Test
+    void urlOk() throws IOException {
+        final File f = File.createTempFile("robozonky-", ".cfg");
+        Files.write(f.toPath(), "Robot má udržovat konzervativní portfolio.".getBytes(Defaults.CHARSET));
+        final InstallData d = StrategySettingsValidatorTest.mockInstallData(f.toURI().toURL());
         // execute sut
         final DataValidator validator = new StrategySettingsValidator();
         final DataValidator.Status result = validator.validateData(d);

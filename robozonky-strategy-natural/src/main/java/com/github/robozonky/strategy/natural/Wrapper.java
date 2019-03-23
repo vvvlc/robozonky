@@ -1,5 +1,5 @@
 /*
- * Copyright 2018 The RoboZonky Project
+ * Copyright 2019 The RoboZonky Project
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -25,6 +25,7 @@ import com.github.robozonky.api.remote.enums.Region;
 import com.github.robozonky.api.strategies.InvestmentDescriptor;
 import com.github.robozonky.api.strategies.LoanDescriptor;
 import com.github.robozonky.api.strategies.ParticipationDescriptor;
+import com.github.robozonky.api.strategies.ReservationDescriptor;
 
 public interface Wrapper<T> {
 
@@ -40,6 +41,11 @@ public interface Wrapper<T> {
         return new ParticipationWrapper(descriptor);
     }
 
+    static Wrapper<ReservationDescriptor> wrap(final ReservationDescriptor descriptor) {
+        return new ReservationWrapper(descriptor);
+    }
+
+
     boolean isInsuranceActive();
 
     Region getRegion();
@@ -50,6 +56,8 @@ public interface Wrapper<T> {
 
     BigDecimal getInterestRate();
 
+    BigDecimal getRevenueRate();
+
     Purpose getPurpose();
 
     Rating getRating();
@@ -59,6 +67,8 @@ public interface Wrapper<T> {
     int getRemainingTermInMonths();
 
     int getOriginalAmount();
+
+    int getOriginalAnnuity();
 
     BigDecimal getRemainingPrincipal();
 

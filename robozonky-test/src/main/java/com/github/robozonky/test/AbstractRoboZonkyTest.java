@@ -1,5 +1,5 @@
 /*
- * Copyright 2018 The RoboZonky Project
+ * Copyright 2019 The RoboZonky Project
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -17,6 +17,8 @@
 package com.github.robozonky.test;
 
 import java.math.BigDecimal;
+import java.time.ZonedDateTime;
+import java.util.concurrent.atomic.AtomicReference;
 import java.util.function.Consumer;
 import java.util.function.Function;
 import java.util.function.Supplier;
@@ -28,54 +30,61 @@ import com.github.robozonky.api.remote.entities.Statistics;
 import com.github.robozonky.api.remote.entities.Wallet;
 import com.github.robozonky.api.remote.entities.ZonkyApiToken;
 import com.github.robozonky.api.strategies.PortfolioOverview;
-import com.github.robozonky.common.Tenant;
+import com.github.robozonky.common.async.Tasks;
 import com.github.robozonky.common.remote.ApiProvider;
 import com.github.robozonky.common.remote.OAuth;
 import com.github.robozonky.common.remote.Zonky;
 import com.github.robozonky.common.state.TenantState;
-import com.github.robozonky.test.schedulers.TestingSchedulerService;
+import com.github.robozonky.common.tenant.RemotePortfolio;
+import com.github.robozonky.common.tenant.Tenant;
+import com.github.robozonky.internal.util.AbstractMinimalRoboZonkyTest;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeAll;
 import org.mockito.stubbing.Answer;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
 
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyInt;
-import static org.mockito.Mockito.doAnswer;
-import static org.mockito.Mockito.mock;
-import static org.mockito.Mockito.reset;
-import static org.mockito.Mockito.spy;
-import static org.mockito.Mockito.when;
+import static org.mockito.Mockito.*;
 
 /**
  * This is a suggested parent class for all RoboZonky tests using this module. It will make sure to clear shared state
  * before and after each state, so that tests don't have unexpected and well-hidden dependencies.
  */
-public abstract class AbstractRoboZonkyTest {
+public abstract class AbstractRoboZonkyTest extends AbstractMinimalRoboZonkyTest {
 
     protected static final SessionInfo SESSION = new SessionInfo("someone@robozonky.cz", "Testing",
                                                                  false),
             SESSION_DRY = new SessionInfo("someone@robozonky.cz", "Testing", true);
 
-    private static final Logger LOGGER = LoggerFactory.getLogger(AbstractRoboZonkyTest.class);
-
     protected static Zonky harmlessZonky(final int availableBalance) {
         final Zonky zonky = mock(Zonky.class);
         final BigDecimal balance = BigDecimal.valueOf(availableBalance);
         when(zonky.getWallet()).thenReturn(new Wallet(1, 2, balance, balance));
-        when(zonky.getRestrictions()).thenReturn(new Restrictions());
+        when(zonky.getRestrictions()).thenReturn(new Restrictions(true));
         when(zonky.getBlockedAmounts()).thenAnswer(i -> Stream.empty());
         when(zonky.getStatistics()).thenReturn(Statistics.empty());
         when(zonky.getDevelopments(anyInt())).thenAnswer(i -> Stream.empty());
         return zonky;
     }
 
+    public static RemotePortfolio mockPortfolio(final Zonky zonky) {
+        final AtomicReference<BigDecimal> change = new AtomicReference<>(BigDecimal.ZERO);
+        final RemotePortfolio p = mock(RemotePortfolio.class);
+        doAnswer(i -> {
+            final BigDecimal amount = i.getArgument(2);
+            change.updateAndGet(old -> old.add(amount));
+            return null;
+        }).when(p).simulateCharge(anyInt(), any(), any());
+        final Supplier<BigDecimal> balance = () -> zonky.getWallet().getBalance().subtract(change.get());
+        when(p.getBalance()).thenAnswer(i -> balance.get());
+        when(p.getOverview()).thenAnswer(i -> mockPortfolioOverview(balance.get().intValue()));
+        return p;
+    }
+
     protected static Tenant mockTenant(final Zonky zonky) {
         return mockTenant(zonky, true);
     }
 
-    @SuppressWarnings("unchecked")
     protected static Tenant mockTenant(final Zonky zonky, final boolean isDryRun) {
         final Tenant auth = new TestingTenant(isDryRun ? SESSION_DRY : SESSION, zonky);
         return spy(auth);
@@ -85,7 +94,6 @@ public abstract class AbstractRoboZonkyTest {
         return mockTenant(harmlessZonky(10_000));
     }
 
-    @SuppressWarnings("unchecked")
     protected static ApiProvider mockApiProvider(final OAuth oauth, final Zonky z) {
         final ApiProvider api = mock(ApiProvider.class);
         when(api.oauth(any())).then(i -> {
@@ -121,6 +129,7 @@ public abstract class AbstractRoboZonkyTest {
         when(po.getShareAtRisk()).thenReturn(BigDecimal.ZERO);
         when(po.getShareOnInvestment(any())).thenReturn(BigDecimal.ZERO);
         when(po.getAtRiskShareOnInvestment(any())).thenReturn(BigDecimal.ZERO);
+        when(po.getTimestamp()).thenReturn(ZonedDateTime.now());
         return po;
     }
 
@@ -134,13 +143,13 @@ public abstract class AbstractRoboZonkyTest {
     }
 
     @AfterEach
-    protected void reinitScheduler() {
-        reset(TestingSchedulerService.MOCK_SERVICE);
+    void closeSchedulers() {
+        Tasks.closeAll();
     }
 
     @AfterEach
     protected void deleteState() {
         TenantState.destroyAll();
-        AbstractRoboZonkyTest.LOGGER.info("Destroyed state.");
+        logger.info("Destroyed state.");
     }
 }

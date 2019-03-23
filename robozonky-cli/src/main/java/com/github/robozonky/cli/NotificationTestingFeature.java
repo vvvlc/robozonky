@@ -1,5 +1,5 @@
 /*
- * Copyright 2018 The RoboZonky Project
+ * Copyright 2019 The RoboZonky Project
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -18,6 +18,7 @@ package com.github.robozonky.cli;
 
 import java.net.URL;
 
+import com.github.robozonky.api.SessionInfo;
 import picocli.CommandLine;
 
 @CommandLine.Command(name = "notification-tester", description = NotificationTestingFeature.DESCRIPTION)
@@ -52,11 +53,10 @@ public final class NotificationTestingFeature extends AbstractFeature {
 
     @Override
     public void test() throws TestFailedException {
-        final boolean success = Checker.notifications(username, location);
-        if (success) {
-            LOGGER.info("Notifications should have been sent now.");
-        } else {
+        final boolean success = Checker.notifications(new SessionInfo(username), location);
+        if (!success) {
             throw new TestFailedException("No notifications have been sent. Check log for possible problems.");
         }
+        logger.info("Notifications should have been sent now.");
     }
 }

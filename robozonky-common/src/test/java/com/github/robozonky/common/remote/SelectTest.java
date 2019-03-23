@@ -1,5 +1,5 @@
 /*
- * Copyright 2018 The RoboZonky Project
+ * Copyright 2019 The RoboZonky Project
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -25,6 +25,7 @@ import java.util.UUID;
 import com.github.robozonky.internal.api.Defaults;
 import org.junit.jupiter.api.Test;
 
+import static org.assertj.core.api.Assertions.*;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.*;
 
@@ -296,6 +297,22 @@ class SelectTest {
         final RoboZonkyFilter filter = mock(RoboZonkyFilter.class);
         select.accept(filter);
         verify(filter).setQueryParam(eq(fieldName + "__in"), eq("[\"" + value + "\"]"));
+    }
+
+    @Test
+    void equality() {
+        final Select select = Select.unrestricted();
+        assertThat(select).isEqualTo(select);
+        assertThat(select).isNotEqualTo(null);
+        final Select select2 = Select.unrestricted().greaterThan("a", 1);
+        assertThat(select2).isNotEqualTo(select);
+        assertThat(select).isNotEqualTo(select2);
+        final Select select3 = Select.unrestricted().greaterThan("a", 1);
+        assertThat(select2).isEqualTo(select3);
+        assertThat(select3).isEqualTo(select2);
+        final Select select4 = Select.unrestricted().greaterThan("a", 2);
+        assertThat(select4).isNotEqualTo(select3);
+        assertThat(select3).isNotEqualTo(select4);
     }
 
     @Test

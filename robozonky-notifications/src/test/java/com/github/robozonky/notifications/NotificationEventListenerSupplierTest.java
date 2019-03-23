@@ -1,5 +1,5 @@
 /*
- * Copyright 2018 The RoboZonky Project
+ * Copyright 2019 The RoboZonky Project
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -20,12 +20,12 @@ import java.io.IOException;
 import java.io.InputStream;
 
 import com.github.robozonky.api.notifications.RoboZonkyCrashedEvent;
-import com.github.robozonky.notifications.listeners.RoboZonkyCrashedEventListener;
+import com.github.robozonky.api.notifications.RoboZonkyDaemonFailedEvent;
 import com.github.robozonky.notifications.listeners.RoboZonkyTestingEventListener;
 import org.junit.jupiter.api.Test;
 
-import static org.assertj.core.api.Assertions.assertThat;
-import static org.mockito.Mockito.spy;
+import static org.assertj.core.api.Assertions.*;
+import static org.mockito.Mockito.*;
 
 class NotificationEventListenerSupplierTest {
 
@@ -41,12 +41,12 @@ class NotificationEventListenerSupplierTest {
 
     @Test
     void lifecycle() throws IOException {
-        final NotificationEventListenerSupplier<RoboZonkyCrashedEvent> s =
-                new NotificationEventListenerSupplier<>(RoboZonkyCrashedEvent.class);
+        final NotificationEventListenerSupplier<RoboZonkyDaemonFailedEvent> s =
+                new NotificationEventListenerSupplier<>(RoboZonkyDaemonFailedEvent.class);
         assertThat(s.apply(Target.EMAIL)).isEmpty();
         // the listener is enabled here
         final ConfigStorage p =
-                mockProperties(RoboZonkyCrashedEventListener.class.getResourceAsStream("notifications-enabled.cfg"));
+                mockProperties(RoboZonkyTestingEventListener.class.getResourceAsStream("notifications-enabled.cfg"));
         s.valueSet(p);
         assertThat(s.apply(Target.EMAIL)).isPresent();
         // disabled here

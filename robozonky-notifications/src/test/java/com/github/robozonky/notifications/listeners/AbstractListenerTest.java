@@ -1,5 +1,5 @@
 /*
- * Copyright 2018 The RoboZonky Project
+ * Copyright 2019 The RoboZonky Project
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -27,7 +27,6 @@ import java.util.Collection;
 import java.util.Collections;
 import java.util.HashMap;
 import java.util.Map;
-import java.util.Optional;
 import java.util.UUID;
 import java.util.stream.Stream;
 
@@ -50,7 +49,7 @@ import com.github.robozonky.api.notifications.LoanLostEvent;
 import com.github.robozonky.api.notifications.LoanNoLongerDelinquentEvent;
 import com.github.robozonky.api.notifications.LoanNowDelinquentEvent;
 import com.github.robozonky.api.notifications.LoanRepaidEvent;
-import com.github.robozonky.api.notifications.RoboZonkyCrashedEvent;
+import com.github.robozonky.api.notifications.ReservationAcceptedEvent;
 import com.github.robozonky.api.notifications.RoboZonkyDaemonFailedEvent;
 import com.github.robozonky.api.notifications.RoboZonkyEndingEvent;
 import com.github.robozonky.api.notifications.RoboZonkyExperimentalUpdateDetectedEvent;
@@ -85,15 +84,11 @@ import org.junit.jupiter.api.DynamicNode;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.TestFactory;
 
-import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.*;
 import static org.junit.jupiter.api.DynamicTest.dynamicTest;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.eq;
-import static org.mockito.Mockito.doReturn;
-import static org.mockito.Mockito.notNull;
-import static org.mockito.Mockito.spy;
-import static org.mockito.Mockito.times;
-import static org.mockito.Mockito.verify;
+import static org.mockito.Mockito.*;
 
 public class AbstractListenerTest extends AbstractRoboZonkyTest {
 
@@ -122,6 +117,7 @@ public class AbstractListenerTest extends AbstractRoboZonkyTest {
         final String s = TemplateProcessor.INSTANCE.processPlainText(listener.getTemplateFileName(),
                                                                      listener.getData(event, SESSION_INFO));
         assertThat(s).contains(Defaults.ROBOZONKY_URL);
+        assertThat(s).contains("uživatel"); // check that UTF-8 is properly encoded
     }
 
     private static <T extends Event> void testHtmlProcessing(final AbstractListener<T> listener,
@@ -131,6 +127,7 @@ public class AbstractListenerTest extends AbstractRoboZonkyTest {
         final String s = TemplateProcessor.INSTANCE.processHtml(listener.getTemplateFileName(),
                                                                 Collections.unmodifiableMap(data));
         assertThat(s).contains(Defaults.ROBOZONKY_URL);
+        assertThat(s).contains("uživatel"); // check that UTF-8 is properly encoded
     }
 
     private static void testListenerEnabled(final Event event) {
@@ -153,6 +150,8 @@ public class AbstractListenerTest extends AbstractRoboZonkyTest {
     private static <T extends Event> void testTriggered(final AbstractTargetHandler h,
                                                         final AbstractListener<T> listener,
                                                         final T event) throws Exception {
+        System.out.println("    ");
+        System.out.println(listener.getSubject(event));
         BalanceTracker.reset(SESSION_INFO);
         listener.handle(event, SESSION_INFO);
         verify(h, times(1)).send(eq(SESSION_INFO), notNull(), notNull(), notNull());
@@ -205,13 +204,14 @@ public class AbstractListenerTest extends AbstractRoboZonkyTest {
         final Loan loan = Loan.custom()
                 .setId(66666)
                 .setAmount(100_000)
+                .setAnnuity(BigDecimal.TEN)
                 .setInterestRate(BigDecimal.TEN)
                 .setDatePublished(OffsetDateTime.now().minusMonths(2))
                 .setName("Úvěr")
                 .setRegion(Region.JIHOCESKY)
                 .setPurpose(Purpose.AUTO_MOTO)
                 .setMainIncomeType(MainIncomeType.EMPLOYMENT)
-                .setRemainingInvestment(2000)
+                .setNonReservedRemainingInvestment(2000)
                 .setRating(Rating.AAAAA)
                 .setTermInMonths(25)
                 .setUrl(new URL("http://www.robozonky.cz"))
@@ -223,6 +223,7 @@ public class AbstractListenerTest extends AbstractRoboZonkyTest {
                 .build();
         // create events for listeners
         return Stream.of(
+                forListener(SupportedListener.RESERVATION_ACCEPTED, new MyReservationAcceptedEvent(loan, i)),
                 forListener(SupportedListener.INVESTMENT_DELEGATED,
                             new MyInvestmentDelegatedEvent(recommendation, loan)),
                 forListener(SupportedListener.INVESTMENT_MADE, new MyInvestmentMadeEvent(loan, i)),
@@ -241,7 +242,6 @@ public class AbstractListenerTest extends AbstractRoboZonkyTest {
                 forListener(SupportedListener.BALANCE_ON_TARGET, new MyExecutionStartedEvent(MAX_PORTFOLIO)),
                 forListener(SupportedListener.BALANCE_UNDER_MINIMUM,
                             new MyExecutionStartedEvent(mockPortfolioOverview(0))),
-                forListener(SupportedListener.CRASHED, new MyRoboZonkyCrashedEvent()),
                 forListener(SupportedListener.DAEMON_FAILED, new MyRoboZonkyDaemonFailedEvent()),
                 forListener(SupportedListener.INITIALIZED, (RoboZonkyInitializedEvent) OffsetDateTime::now),
                 forListener(SupportedListener.ENDING, (RoboZonkyEndingEvent) OffsetDateTime::now),
@@ -344,19 +344,6 @@ public class AbstractListenerTest extends AbstractRoboZonkyTest {
         @Override
         public Throwable getCause() {
             return new RuntimeException();
-        }
-    }
-
-    private static class MyRoboZonkyCrashedEvent implements RoboZonkyCrashedEvent {
-
-        @Override
-        public OffsetDateTime getCreatedOn() {
-            return OffsetDateTime.now();
-        }
-
-        @Override
-        public Optional<Throwable> getCause() {
-            return Optional.of(new RuntimeException());
         }
     }
 
@@ -502,6 +489,37 @@ public class AbstractListenerTest extends AbstractRoboZonkyTest {
         @Override
         public Loan getLoan() {
             return loan;
+        }
+    }
+
+    private static class MyReservationAcceptedEvent implements ReservationAcceptedEvent {
+
+        private final Loan loan;
+        private final Investment i;
+
+        public MyReservationAcceptedEvent(final Loan loan, final Investment i) {
+            this.loan = loan;
+            this.i = i;
+        }
+
+        @Override
+        public OffsetDateTime getCreatedOn() {
+            return OffsetDateTime.now();
+        }
+
+        @Override
+        public Loan getLoan() {
+            return loan;
+        }
+
+        @Override
+        public Investment getInvestment() {
+            return i;
+        }
+
+        @Override
+        public PortfolioOverview getPortfolioOverview() {
+            return MAX_PORTFOLIO;
         }
     }
 

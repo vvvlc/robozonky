@@ -1,5 +1,5 @@
 /*
- * Copyright 2018 The RoboZonky Project
+ * Copyright 2019 The RoboZonky Project
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -21,11 +21,12 @@ import java.math.RoundingMode;
 
 public final class BigDecimalCalculator {
 
+    static final int DEFAULT_SCALE = 8;
+    private static final BigDecimal MINIMAL_INCREMENT = BigDecimal.ONE.divide(BigDecimal.TEN.pow(DEFAULT_SCALE));
+
     private BigDecimalCalculator() {
         // no instances
     }
-
-    static final int DEFAULT_SCALE = 8;
 
     public static BigDecimal toScale(final BigDecimal number, final int scale) {
         return number.setScale(scale, RoundingMode.HALF_EVEN);
@@ -48,7 +49,7 @@ public final class BigDecimalCalculator {
     }
 
     public static BigDecimal divide(final BigDecimal numerator, final BigDecimal denominator) {
-        return numerator.divide(denominator, DEFAULT_SCALE, RoundingMode.HALF_EVEN).stripTrailingZeros();
+        return finish(numerator.divide(denominator, DEFAULT_SCALE, RoundingMode.HALF_EVEN));
     }
 
     public static BigDecimal plus(final Number addend1, final Number addend2) {
@@ -64,7 +65,7 @@ public final class BigDecimalCalculator {
     }
 
     public static BigDecimal plus(final BigDecimal addend1, final BigDecimal addend2) {
-        return addend1.add(addend2).stripTrailingZeros();
+        return finish(addend1.add(addend2));
     }
 
     public static BigDecimal minus(final Number minuend, final Number subtrahend) {
@@ -84,7 +85,7 @@ public final class BigDecimalCalculator {
     }
 
     public static BigDecimal minus(final BigDecimal minuend, final BigDecimal subtrahend) {
-        return minuend.subtract(subtrahend).stripTrailingZeros();
+        return finish(minuend.subtract(subtrahend));
     }
 
     public static BigDecimal times(final Number multiplicand, final Number multiplier) {
@@ -100,6 +101,18 @@ public final class BigDecimalCalculator {
     }
 
     public static BigDecimal times(final BigDecimal multiplicand, final BigDecimal multiplier) {
-        return multiplicand.multiply(multiplier).stripTrailingZeros();
+        return finish(multiplicand.multiply(multiplier));
+    }
+
+    private static BigDecimal finish(final BigDecimal number) {
+        return toScale(number).stripTrailingZeros();
+    }
+
+    public static BigDecimal lessThan(final BigDecimal number) {
+        return minus(number, MINIMAL_INCREMENT);
+    }
+
+    public static BigDecimal moreThan(final BigDecimal number) {
+        return plus(number, MINIMAL_INCREMENT);
     }
 }

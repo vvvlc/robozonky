@@ -1,5 +1,5 @@
 /*
- * Copyright 2018 The RoboZonky Project
+ * Copyright 2019 The RoboZonky Project
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -26,6 +26,7 @@ import java.util.Set;
 import java.util.SortedSet;
 import java.util.StringJoiner;
 import java.util.TreeSet;
+import java.util.function.Function;
 import java.util.regex.Pattern;
 import java.util.stream.Collectors;
 import java.util.stream.IntStream;
@@ -38,10 +39,11 @@ import javax.xml.xpath.XPathExpression;
 import javax.xml.xpath.XPathExpressionException;
 import javax.xml.xpath.XPathFactory;
 
+import com.github.robozonky.common.async.Refreshable;
 import com.github.robozonky.common.jobs.SimplePayload;
 import com.github.robozonky.internal.api.Defaults;
-import com.github.robozonky.util.IoUtil;
-import com.github.robozonky.util.Refreshable;
+import com.github.robozonky.internal.util.UrlUtil;
+import io.vavr.control.Try;
 import org.apache.commons.io.IOUtils;
 import org.w3c.dom.Document;
 import org.w3c.dom.Node;
@@ -93,7 +95,7 @@ final class UpdateMonitor extends Refreshable<VersionIdentifier> implements Simp
         }
         joiner.add(artifactId)
                 .add("maven-metadata.xml");
-        return new URL(joiner.toString()).openStream();
+        return UrlUtil.open(new URL(joiner.toString()));
     }
 
     private static boolean isStable(final String version) {
@@ -147,20 +149,20 @@ final class UpdateMonitor extends Refreshable<VersionIdentifier> implements Simp
     }
 
     @Override
-    protected String getLatestSource() throws Exception {
-        return IoUtil.tryFunction(() -> UpdateMonitor.getMavenCentralData(this.groupId, this.artifactId,
-                                                                          this.mavenCentralHostname),
-                                     s -> IOUtils.toString(s, Defaults.CHARSET));
+    protected String getLatestSource() {
+        return Try.withResources(() -> UpdateMonitor.getMavenCentralData(this.groupId, this.artifactId,
+                                                                         this.mavenCentralHostname))
+                .of(s -> IOUtils.toString(s, Defaults.CHARSET))
+                .getOrElseThrow((Function<Throwable, IllegalStateException>) IllegalStateException::new);
     }
 
     @Override
     protected Optional<VersionIdentifier> transform(final String source) {
-        try {
-            return IoUtil.tryFunction(() -> new ByteArrayInputStream(source.getBytes(Defaults.CHARSET)),
-                                         s -> Optional.of(UpdateMonitor.parseVersionString(s)));
-        } catch (final Exception ex) {
-            LOGGER.debug("Failed parsing source.", ex);
-            return Optional.empty();
-        }
+        return Try.withResources(() -> new ByteArrayInputStream(source.getBytes(Defaults.CHARSET)))
+                .of(s -> Optional.of(UpdateMonitor.parseVersionString(s)))
+                .getOrElseGet(ex -> {
+                    logger.debug("Failed parsing source.", ex);
+                    return Optional.empty();
+                });
     }
 }

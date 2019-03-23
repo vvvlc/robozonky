@@ -1,5 +1,5 @@
 /*
- * Copyright 2018 The RoboZonky Project
+ * Copyright 2019 The RoboZonky Project
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -16,14 +16,16 @@
 
 package com.github.robozonky.cli;
 
+import java.io.BufferedInputStream;
 import java.io.File;
-import java.io.IOException;
 import java.net.MalformedURLException;
 import java.net.URL;
 import java.util.concurrent.atomic.LongAdder;
 
 import com.github.robozonky.common.extensions.StrategyLoader;
 import com.github.robozonky.internal.api.Defaults;
+import com.github.robozonky.internal.util.UrlUtil;
+import io.vavr.control.Try;
 import org.apache.commons.io.IOUtils;
 import picocli.CommandLine;
 
@@ -62,16 +64,14 @@ public final class StrategyValidationFeature extends AbstractFeature {
 
     @Override
     public void setup() throws SetupFailedException {
-        try {
-            text = IOUtils.toString(location, Defaults.CHARSET);
-        } catch (final IOException ex) {
-            throw new SetupFailedException(ex);
-        }
+        text = Try.withResources(() -> new BufferedInputStream(UrlUtil.open(location)))
+                .of(s -> IOUtils.toString(s, Defaults.CHARSET))
+                .getOrElseThrow(SetupFailedException::new);
     }
 
     private void report(final LongAdder adder, final String type) {
         adder.increment();
-        LOGGER.info("{} strategy present.", type);
+        logger.info("{} strategy present.", type);
     }
 
     @Override
@@ -80,6 +80,7 @@ public final class StrategyValidationFeature extends AbstractFeature {
         StrategyLoader.toInvest(text).ifPresent(s -> report(adder, "Investing"));
         StrategyLoader.toPurchase(text).ifPresent(s -> report(adder, "Purchasing"));
         StrategyLoader.toSell(text).ifPresent(s -> report(adder, "Selling"));
+        StrategyLoader.forReservations(text).ifPresent(s -> report(adder, "Reservation system"));
         if (adder.sum() == 0) {
             throw new TestFailedException("No strategies found. Check log for possible parser errors.");
         }

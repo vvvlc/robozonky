@@ -1,5 +1,5 @@
 /*
- * Copyright 2018 The RoboZonky Project
+ * Copyright 2019 The RoboZonky Project
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -16,13 +16,16 @@
 
 package com.github.robozonky.common.remote;
 
-import java.util.concurrent.ForkJoinPool;
 import java.util.function.Consumer;
 import java.util.function.Function;
 
-import com.github.robozonky.util.BlockingOperation;
+import jdk.jfr.Event;
+import org.apache.logging.log4j.LogManager;
+import org.apache.logging.log4j.Logger;
 
 class Api<T> {
+
+    private static final Logger LOGGER = LogManager.getLogger(Api.class);
 
     private final T proxy;
 
@@ -30,21 +33,26 @@ class Api<T> {
         this.proxy = proxy;
     }
 
-    <S> S call(final Function<T, S> function) {
-        final BlockingOperation<S> operation = new BlockingOperation<>(() -> function.apply(proxy));
+    static <Y, Z> Z call(final Function<Y, Z> function, final Y proxy) {
+        LOGGER.trace("Executing...");
+        final Event event = new ZonkyCallJfrEvent();
         try {
-            ForkJoinPool.managedBlock(operation);
-            return operation.getResult();
-        } catch (final InterruptedException ex) {
-            Thread.currentThread().interrupt();
-            return null;
+            event.begin();
+            return function.apply(proxy);
+        } finally {
+            event.commit();
+            LOGGER.trace("... done.");
         }
+    }
+
+    <S> S call(final Function<T, S> function) {
+        return call(function, proxy);
     }
 
     void run(final Consumer<T> consumer) {
         final Function<T, Boolean> wrapper = t -> {
             consumer.accept(t);
-            return Boolean.FALSE; // we need to return something
+            return false; // we need to return something
         };
         call(wrapper);
     }

@@ -1,5 +1,5 @@
 /*
- * Copyright 2018 The RoboZonky Project
+ * Copyright 2019 The RoboZonky Project
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -23,7 +23,7 @@ import com.github.robozonky.notifications.Target;
 import com.github.robozonky.test.AbstractRoboZonkyTest;
 import org.junit.jupiter.api.Test;
 
-import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.*;
 
 class BalanceTrackerTest extends AbstractRoboZonkyTest {
 
@@ -41,5 +41,7 @@ class BalanceTrackerTest extends AbstractRoboZonkyTest {
         final BigDecimal newerBalance = BigDecimal.valueOf(100);
         b.setLastKnownBalance(SESSION, newerBalance);
         assertThat(b.getLastKnownBalance(SESSION)).isPresent().hasValue(newerBalance);
+        BalanceTracker.reset(SESSION);
+        assertThat(b.getLastKnownBalance(SESSION)).isEmpty();
     }
 }

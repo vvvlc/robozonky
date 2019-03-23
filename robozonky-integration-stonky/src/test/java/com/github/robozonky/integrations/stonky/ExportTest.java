@@ -1,5 +1,5 @@
 /*
- * Copyright 2018 The RoboZonky Project
+ * Copyright 2019 The RoboZonky Project
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -17,13 +17,14 @@
 package com.github.robozonky.integrations.stonky;
 
 import java.io.File;
+import java.time.Duration;
 import java.util.Optional;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ExecutionException;
 import javax.ws.rs.core.Response;
 
-import com.github.robozonky.common.Tenant;
 import com.github.robozonky.common.remote.Zonky;
+import com.github.robozonky.common.tenant.Tenant;
 import com.github.robozonky.test.AbstractRoboZonkyTest;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
@@ -33,12 +34,9 @@ import org.mockserver.model.HttpRequest;
 import org.mockserver.model.HttpResponse;
 import org.mockserver.socket.PortFactory;
 
-import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.*;
 import static org.mockito.ArgumentMatchers.any;
-import static org.mockito.Mockito.doReturn;
-import static org.mockito.Mockito.mock;
-import static org.mockito.Mockito.verify;
-import static org.mockito.Mockito.when;
+import static org.mockito.Mockito.*;
 
 class ExportTest extends AbstractRoboZonkyTest {
 
@@ -82,5 +80,13 @@ class ExportTest extends AbstractRoboZonkyTest {
         final CompletableFuture<Optional<File>> c = Export.INVESTMENTS.download(tenant);
         assertThat(c.get()).isPresent();
         verify(zonky).downloadInvestmentsExport();
+    }
+
+    @Test
+    void fails() throws ExecutionException, InterruptedException {
+        final Tenant tenant = mockTenant(zonky);
+        doThrow(IllegalStateException.class).when(zonky).downloadInvestmentsExport();
+        final CompletableFuture<Optional<File>> c = Export.INVESTMENTS.download(tenant, Duration.ofSeconds(2));
+        assertThat(c.get()).isEmpty();
     }
 }

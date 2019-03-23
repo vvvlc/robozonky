@@ -1,5 +1,5 @@
 /*
- * Copyright 2018 The RoboZonky Project
+ * Copyright 2019 The RoboZonky Project
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -16,24 +16,31 @@
 
 package com.github.robozonky.app;
 
+import java.lang.management.ManagementFactory;
+import java.time.OffsetDateTime;
 import java.util.List;
 
+import com.github.robozonky.api.SessionInfo;
 import com.github.robozonky.api.notifications.Event;
 import com.github.robozonky.api.notifications.RoboZonkyEndingEvent;
 import com.github.robozonky.api.notifications.RoboZonkyInitializedEvent;
 import com.github.robozonky.api.notifications.RoboZonkyStartingEvent;
 import com.github.robozonky.app.configuration.InvestmentMode;
+import com.github.robozonky.app.events.AbstractEventLeveragingTest;
 import com.github.robozonky.app.runtime.Lifecycle;
-import com.github.robozonky.util.Scheduler;
+import com.github.robozonky.common.async.Scheduler;
+import com.github.robozonky.common.async.Tasks;
+import com.github.robozonky.common.management.AbstractBaseMBean;
+import com.github.robozonky.common.management.BaseMBean;
+import com.github.robozonky.common.management.Management;
+import com.github.robozonky.common.management.ManagementBean;
 import org.junit.jupiter.api.Test;
 
-import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.*;
 import static org.assertj.core.api.SoftAssertions.assertSoftly;
 import static org.mockito.ArgumentMatchers.anyInt;
 import static org.mockito.ArgumentMatchers.eq;
-import static org.mockito.Mockito.doNothing;
-import static org.mockito.Mockito.spy;
-import static org.mockito.Mockito.verify;
+import static org.mockito.Mockito.*;
 
 class AppTest extends AbstractEventLeveragingTest {
 
@@ -66,14 +73,13 @@ class AppTest extends AbstractEventLeveragingTest {
      */
     @Test
     void triggersEvents() {
-        final Scheduler s = Scheduler.inBackground();
         final App main = spy(new App());
         doNothing().when(main).actuallyExit(anyInt());
         doNothing().when(main).ensureLiveness(); // avoid going out to actual live Zonky server
         try {
-            main.execute(new MyInvestmentMode());
+            assertThat(main.execute(new MyInvestmentMode())).isEqualTo(ReturnCode.OK);
         } finally { // clean up, shutting down executors etc.
-            main.exit(new ShutdownHook.Result(ReturnCode.OK, null));
+            main.exit(new ShutdownHook.Result(ReturnCode.OK));
         }
         verify(main).ensureLiveness();
         verify(main).actuallyExit(ReturnCode.OK.getCode());
@@ -84,7 +90,20 @@ class AppTest extends AbstractEventLeveragingTest {
             softly.assertThat(events.get(1)).isInstanceOf(RoboZonkyInitializedEvent.class);
             softly.assertThat(events.get(2)).isInstanceOf(RoboZonkyEndingEvent.class);
         });
-        assertThat(s.isClosed()).isTrue();
+    }
+
+    @Test
+    void unregistersBeans() {
+        final App main = spy(new App());
+        doNothing().when(main).actuallyExit(anyInt());
+        doNothing().when(main).ensureLiveness(); // avoid going out to actual live Zonky server
+        final int countBefore = ManagementFactory.getPlatformMBeanServer().getMBeanCount();
+        main.execute(new MyInvestmentMode());
+        final int countAfter = ManagementFactory.getPlatformMBeanServer().getMBeanCount();
+        assertThat(countAfter).isGreaterThan(countBefore);
+        main.exit(new ShutdownHook.Result(ReturnCode.OK));
+        final int finalCount = ManagementFactory.getPlatformMBeanServer().getMBeanCount();
+        assertThat(finalCount).isEqualTo(countBefore);
     }
 
     /**
@@ -92,7 +111,6 @@ class AppTest extends AbstractEventLeveragingTest {
      */
     @Test
     void failsCorrectly() {
-        final Scheduler s = Scheduler.inBackground();
         final App main = spy(new App());
         doNothing().when(main).actuallyExit(anyInt());
         doNothing().when(main).ensureLiveness(); // avoid going out to actual live Zonky server
@@ -100,20 +118,23 @@ class AppTest extends AbstractEventLeveragingTest {
             final ReturnCode result = main.execute(new MyFailingInvestmentMode());
             assertThat(result).isEqualTo(ReturnCode.ERROR_UNEXPECTED);
         } finally { // clean up, shutting down executors etc.
-            main.exit(new ShutdownHook.Result(ReturnCode.OK, null));
+            final Scheduler s = Tasks.BACKGROUND.scheduler();
+            main.exit(new ShutdownHook.Result(ReturnCode.ERROR_UNEXPECTED));
+            assertThat(s.isClosed()).isTrue();
         }
-        assertThat(s.isClosed()).isTrue();
     }
 
     private static class MyInvestmentMode implements InvestmentMode {
 
         @Override
-        public String getSessionName() {
-            return "";
+        public SessionInfo getSessionInfo() {
+            return SESSION;
         }
 
         @Override
-        public ReturnCode apply(Lifecycle lifecycle) {
+        public ReturnCode apply(final Lifecycle lifecycle) {
+            final ManagementBean<BaseMBean> mb = new ManagementBean<>(BaseMBean.class, Base::new);
+            Management.register(mb);
             return ReturnCode.OK;
         }
 
@@ -123,15 +144,23 @@ class AppTest extends AbstractEventLeveragingTest {
         }
     }
 
+    private static final class Base extends AbstractBaseMBean {
+
+        @Override
+        public OffsetDateTime getLastUpdated() {
+            return OffsetDateTime.now();
+        }
+    }
+
     private static class MyFailingInvestmentMode implements InvestmentMode {
 
         @Override
-        public String getSessionName() {
-            return "";
+        public SessionInfo getSessionInfo() {
+            return SESSION;
         }
 
         @Override
-        public ReturnCode apply(Lifecycle lifecycle) {
+        public ReturnCode apply(final Lifecycle lifecycle) {
             throw new IllegalStateException("Testing failure");
         }
 

@@ -1,5 +1,5 @@
 /*
- * Copyright 2018 The RoboZonky Project
+ * Copyright 2019 The RoboZonky Project
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -29,7 +29,7 @@ import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Nested;
 import org.junit.jupiter.api.Test;
 
-import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.*;
 import static org.assertj.core.api.SoftAssertions.assertSoftly;
 
 class DriveOverviewTest {
@@ -37,6 +37,11 @@ class DriveOverviewTest {
     private static final SessionInfo SESSION_INFO = new SessionInfo("someone@somewhere.cz");
 
     private final Credential credential = new MockGoogleCredential.Builder().build();
+
+    @Test
+    void folderName() {
+        assertThat(DriveOverview.getFolderName(SESSION_INFO)).isNotEmpty();
+    }
 
     @Test
     void emptyGoogleDrive() throws IOException {

@@ -1,5 +1,5 @@
 /*
- * Copyright 2018 The RoboZonky Project
+ * Copyright 2019 The RoboZonky Project
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -19,17 +19,22 @@ package com.github.robozonky.notifications.listeners;
 import java.io.IOException;
 import java.math.BigDecimal;
 import java.util.Collections;
+import java.util.Date;
 import java.util.HashMap;
 import java.util.Map;
 import java.util.stream.Collectors;
 import java.util.stream.Stream;
 
 import com.github.robozonky.api.SessionInfo;
+import com.github.robozonky.api.notifications.DelinquencyBased;
 import com.github.robozonky.api.notifications.Event;
 import com.github.robozonky.api.notifications.EventListener;
 import com.github.robozonky.api.notifications.Financial;
 import com.github.robozonky.api.notifications.InvestmentBased;
 import com.github.robozonky.api.notifications.LoanBased;
+import com.github.robozonky.api.notifications.LoanLostEvent;
+import com.github.robozonky.api.notifications.LoanNoLongerDelinquentEvent;
+import com.github.robozonky.api.notifications.LoanRepaidEvent;
 import com.github.robozonky.api.notifications.MarketplaceInvestmentBased;
 import com.github.robozonky.api.notifications.MarketplaceLoanBased;
 import com.github.robozonky.api.remote.enums.Rating;
@@ -41,15 +46,16 @@ import com.github.robozonky.notifications.Submission;
 import com.github.robozonky.notifications.SupportedListener;
 import com.github.robozonky.notifications.templates.TemplateProcessor;
 import freemarker.template.TemplateException;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
+import org.apache.logging.log4j.LogManager;
+import org.apache.logging.log4j.Logger;
 
 import static com.github.robozonky.internal.util.Maps.entry;
 
 abstract class AbstractListener<T extends Event> implements EventListener<T> {
 
-    protected final Logger LOGGER = LoggerFactory.getLogger(this.getClass());
+    protected final Logger logger = LogManager.getLogger(this.getClass());
     final BalanceTracker balanceTracker;
+    final DelinquencyTracker delinquencyTracker;
     private final AbstractTargetHandler handler;
     private final SupportedListener listener;
 
@@ -57,6 +63,7 @@ abstract class AbstractListener<T extends Event> implements EventListener<T> {
         this.listener = listener;
         this.handler = handler;
         this.balanceTracker = new BalanceTracker(handler.getTarget());
+        this.delinquencyTracker = new DelinquencyTracker(handler.getTarget());
     }
 
     /**
@@ -69,6 +76,12 @@ abstract class AbstractListener<T extends Event> implements EventListener<T> {
         if (event instanceof Financial) { // register balance
             final BigDecimal balance = ((Financial) event).getPortfolioOverview().getCzkAvailable();
             balanceTracker.setLastKnownBalance(sessionInfo, balance);
+        }
+        if (event instanceof DelinquencyBased) {
+            delinquencyTracker.setDelinquent(sessionInfo, ((DelinquencyBased) event).getInvestment());
+        } else if (event instanceof LoanLostEvent || event instanceof LoanRepaidEvent ||
+                event instanceof LoanNoLongerDelinquentEvent) {
+            delinquencyTracker.unsetDelinquent(sessionInfo, ((InvestmentBased) event).getInvestment());
         }
     }
 
@@ -119,6 +132,8 @@ abstract class AbstractListener<T extends Event> implements EventListener<T> {
                 entry("userAgent", Defaults.ROBOZONKY_USER_AGENT),
                 entry("isDryRun", sessionInfo.isDryRun())
         ));
+        result.put("conception", Date.from(event.getConceivedOn().toInstant()));
+        result.put("creation", Date.from(event.getCreatedOn().toInstant()));
         return Collections.unmodifiableMap(result);
     }
 
@@ -164,12 +179,14 @@ abstract class AbstractListener<T extends Event> implements EventListener<T> {
 
     @Override
     public final void handle(final T event, final SessionInfo sessionInfo) {
+        final jdk.jfr.Event jfr = new EmailJfrEvent();
+        jfr.begin();
         try {
             if (!this.shouldNotify(event, sessionInfo)) {
-                LOGGER.debug("Will not notify.");
+                logger.debug("Will not notify.");
             } else {
                 // only do the heavy lifting in the handler, after the final send/no-send decision was made
-                LOGGER.debug("Notifying {}.", event);
+                logger.debug("Notifying {}.", event);
                 handler.offer(createSubmission(event, sessionInfo));
             }
         } catch (final Exception ex) {
@@ -178,9 +195,10 @@ abstract class AbstractListener<T extends Event> implements EventListener<T> {
             try {
                 finish(event, sessionInfo);
             } catch (final Exception ex) {
-                LOGGER.trace("Finisher failed.", ex);
+                logger.trace("Finisher failed.", ex);
             } finally {
-                LOGGER.debug("Notified {}.", event);
+                logger.debug("Notified {}.", event);
+                jfr.commit();
             }
         }
     }

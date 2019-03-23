@@ -1,5 +1,5 @@
 /*
- * Copyright 2018 The RoboZonky Project
+ * Copyright 2019 The RoboZonky Project
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -22,18 +22,20 @@ import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.StandardCopyOption;
 import java.util.Objects;
+import java.util.Optional;
 import java.util.Properties;
+import java.util.function.Function;
 import java.util.stream.Stream;
 
 import com.github.robozonky.internal.api.Defaults;
-import com.github.robozonky.util.IoUtil;
 import com.izforge.izpack.api.data.InstallData;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
+import io.vavr.control.Try;
+import org.apache.logging.log4j.LogManager;
+import org.apache.logging.log4j.Logger;
 
 final class Util {
 
-    private static final Logger LOGGER = LoggerFactory.getLogger(Util.class);
+    private static final Logger LOGGER = LogManager.getLogger(Util.class);
 
     private Util() {
         // no instances
@@ -50,10 +52,14 @@ final class Util {
         return String.valueOf(Integer.parseInt(string));
     }
 
-    public static void writeOutProperties(final Properties properties, final File target) throws IOException {
-        IoUtil.tryConsumer(() -> Files.newBufferedWriter(target.toPath(), Defaults.CHARSET),
-                               w -> properties.store(w, Defaults.ROBOZONKY_USER_AGENT));
-        LOGGER.debug("Written properties to {}.", target);
+    public static void writeOutProperties(final Properties properties, final File target) {
+        Try.withResources(() -> Files.newBufferedWriter(target.toPath(), Defaults.CHARSET))
+                .of(w -> {
+                    properties.store(w, Defaults.ROBOZONKY_USER_AGENT);
+                    LOGGER.debug("Written properties to {}.", target);
+                    return null;
+                })
+                .getOrElseThrow((Function<Throwable, IllegalStateException>) IllegalStateException::new);
     }
 
     public static Properties configureEmailNotifications(final InstallData data) {
@@ -73,14 +79,13 @@ final class Util {
         p.setProperty("email.investmentMade.enabled", isInvestmentEmailEnabled);
         p.setProperty("email.investmentSold.enabled", isInvestmentEmailEnabled);
         p.setProperty("email.saleOffered.enabled", isInvestmentEmailEnabled);
+        p.setProperty("email.reservationAccepted.enabled", isInvestmentEmailEnabled);
         p.setProperty("email.loanRepaid.enabled", isInvestmentEmailEnabled);
         p.setProperty("email.loanLost.enabled", isInvestmentEmailEnabled);
         p.setProperty("email.loanDefaulted.enabled", isInvestmentEmailEnabled);
-        p.setProperty("email.loanNoLongerDelinquent.enabled", isInvestmentEmailEnabled);
         p.setProperty("email.balanceTracker.enabled", toBoolean(Variables.EMAIL_IS_BALANCE_OVER_200.getValue(data)));
         p.setProperty("email.balanceTracker.targetBalance", "200");
         p.setProperty("email.roboZonkyDaemonFailed.enabled", toBoolean(Variables.EMAIL_IS_FAILURE.getValue(data)));
-        p.setProperty("email.roboZonkyCrashed.enabled", toBoolean(Variables.EMAIL_IS_CRITICAL_FAILURE.getValue(data)));
         p.setProperty("email.roboZonkyUpdateDetected.enabled", "true");
         p.setProperty("email.roboZonkyUpdateDetected.maxHourlyEmails", "1");
         p.setProperty("email.hourlyMaxEmails", "20");
@@ -114,6 +119,19 @@ final class Util {
                     } else { // general Java system property to end up on the command line
                         LOGGER.debug("Setting property {}.", e);
                         commandLine.setProperty(key, value);
+                    }
+                });
+        Stream.of(parts)
+                .map(CommandLinePart::getJvmArguments)
+                .flatMap(p -> p.entrySet().stream())
+                .peek(e -> LOGGER.trace("Processing JVM argument {}.", e))
+                .forEach(e -> {
+                    final String key = e.getKey();
+                    final Optional<String> value = e.getValue();
+                    if (value.isPresent()) {
+                        commandLine.setJvmArgument(key, value.get());
+                    } else {
+                        commandLine.setJvmArgument(key);
                     }
                 });
     }

@@ -1,5 +1,5 @@
 /*
- * Copyright 2018 The RoboZonky Project
+ * Copyright 2019 The RoboZonky Project
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -21,6 +21,7 @@ import java.time.LocalDate;
 import java.util.Arrays;
 import java.util.Collections;
 import java.util.List;
+import java.util.Objects;
 import java.util.Optional;
 import javax.ws.rs.core.Response;
 
@@ -33,29 +34,27 @@ import com.github.robozonky.api.remote.PortfolioApi;
 import com.github.robozonky.api.remote.TransactionApi;
 import com.github.robozonky.api.remote.WalletApi;
 import com.github.robozonky.api.remote.entities.BlockedAmount;
+import com.github.robozonky.api.remote.entities.MyReservation;
 import com.github.robozonky.api.remote.entities.Participation;
 import com.github.robozonky.api.remote.entities.RawInvestment;
 import com.github.robozonky.api.remote.entities.RawLoan;
+import com.github.robozonky.api.remote.entities.ReservationPreferences;
+import com.github.robozonky.api.remote.entities.ResolutionRequest;
 import com.github.robozonky.api.remote.entities.Transaction;
 import com.github.robozonky.api.remote.entities.Wallet;
 import com.github.robozonky.api.remote.entities.ZonkyApiToken;
 import com.github.robozonky.api.remote.entities.sanitized.Investment;
 import com.github.robozonky.api.remote.entities.sanitized.Loan;
+import com.github.robozonky.api.remote.entities.sanitized.Reservation;
 import com.github.robozonky.api.remote.enums.TransactionCategory;
 import com.github.robozonky.api.remote.enums.TransactionOrientation;
 import org.junit.jupiter.api.Test;
 
-import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.*;
 import static org.assertj.core.api.SoftAssertions.assertSoftly;
+import static org.mockito.ArgumentMatchers.argThat;
 import static org.mockito.ArgumentMatchers.eq;
-import static org.mockito.Mockito.any;
-import static org.mockito.Mockito.anyInt;
-import static org.mockito.Mockito.doReturn;
-import static org.mockito.Mockito.mock;
-import static org.mockito.Mockito.spy;
-import static org.mockito.Mockito.times;
-import static org.mockito.Mockito.verify;
-import static org.mockito.Mockito.when;
+import static org.mockito.Mockito.*;
 
 class ZonkyTest {
 
@@ -89,14 +88,14 @@ class ZonkyTest {
 
     private static Zonky mockZonkyWallet(final PaginatedApi<BlockedAmount, WalletApi> wa) {
         final ApiProvider apiProvider = mockApiProvider();
-        when(apiProvider.obtainPaginated(eq(WalletApi.class), any(), any())).thenReturn(wa);
+        when(apiProvider.obtainPaginated(eq(WalletApi.class), any())).thenReturn(wa);
         return new Zonky(apiProvider, () -> mock(ZonkyApiToken.class));
     }
 
     private static <S, T extends EntityCollectionApi<S>> void mockPaginated(final ApiProvider apiProvider,
                                                                             final Class<T> blueprint,
                                                                             final PaginatedApi<S, T> api) {
-        when(apiProvider.obtainPaginated(eq(blueprint), any(), any())).thenReturn(api);
+        when(apiProvider.obtainPaginated(eq(blueprint), any())).thenReturn(api);
     }
 
     private static <S, T extends EntityCollectionApi<S>> void mockPaginated(final ApiProvider apiProvider,
@@ -162,6 +161,7 @@ class ZonkyTest {
             softly.assertThat(z.getBlockedAmounts()).isEmpty();
             softly.assertThat(z.getInvestments(Select.unrestricted())).isEmpty();
             softly.assertThat(z.getInvestment(1)).isEmpty();
+            softly.assertThat(z.getDelinquentInvestments()).isEmpty();
             softly.assertThat(z.getAvailableParticipations(Select.unrestricted())).isEmpty();
             softly.assertThat(z.getTransactions(Select.unrestricted())).isEmpty();
             softly.assertThat(z.getDevelopments(1)).isEmpty();
@@ -275,4 +275,30 @@ class ZonkyTest {
         z.cancel(i);
         verify(control).cancel(eq(i.getId()));
     }
+
+    @Test
+    void accept() {
+        final ControlApi control = mock(ControlApi.class);
+        final Api<ControlApi> ca = mockApi(control);
+        final Zonky z = mockZonkyControl(ca);
+        final MyReservation mr = mock(MyReservation.class);
+        when(mr.getId()).thenReturn(111l);
+        final Reservation r = Reservation.custom().setMyReservation(mr).build();
+        z.accept(r);
+        verify(control).accept(argThat(rs -> {
+            final List<ResolutionRequest> rr = rs.getResolutions();
+            return rr.size() == 1 && Objects.equals(rr.get(0).getReservationId(), r.getMyReservation().getId());
+        }));
+    }
+
+    @Test
+    void reservationPreferences() {
+        final ControlApi control = mock(ControlApi.class);
+        final Api<ControlApi> ca = mockApi(control);
+        final Zonky z = mockZonkyControl(ca);
+        final ReservationPreferences r = new ReservationPreferences();
+        z.setReservationPreferences(r);
+        verify(control).setReservationPreferences(eq(r));
+    }
+
 }

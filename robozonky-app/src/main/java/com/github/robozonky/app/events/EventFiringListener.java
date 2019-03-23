@@ -18,14 +18,15 @@ package com.github.robozonky.app.events;
 
 import com.github.robozonky.api.notifications.Event;
 import com.github.robozonky.api.notifications.EventListener;
+import com.github.robozonky.common.tenant.LazyEvent;
 
 /**
- * Allows to track movement of an {@link Event} through the event pipeline in {@link Events#fire(LazyEvent)}.
+ * Allows to track movement of an {@link Event} through the event pipeline.
  */
 public interface EventFiringListener {
 
     /**
-     * Called immediately after {@link Events#fire(LazyEvent)} was called.
+     * Called immediately after event firing was called.
      * @param event Does not provide the {@link Event} instance directly since, at this point, the event may not have
      * been instantiated yet. For a discussion of what this means, refer to {@link LazyEvent}.
      */
@@ -33,11 +34,11 @@ public interface EventFiringListener {
 
     /**
      * Called after {@link #requested(LazyEvent)} and before {@link #fired(Event, Class)}. The event was already
-     * initialized and was scheduled for being sent to the {@link EventListener}.
+     * initialized and is about to be sent to the {@link EventListener}.
      * @param event The event that was instantiated from the original {@link LazyEvent}.
      * @param listener
      */
-    <T extends Event> void queued(T event, Class<? extends EventListener<T>> listener);
+    <T extends Event> void ready(T event, Class<? extends EventListener<T>> listener);
 
     /**
      * Event was processed and delivered to the {@link EventListener}.

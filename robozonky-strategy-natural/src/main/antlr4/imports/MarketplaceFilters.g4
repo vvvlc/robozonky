@@ -58,11 +58,11 @@ oldMarketplaceFilterExpression returns [Collection<MarketplaceFilter> primary, C
         })
     )* {
         if ($primary.isEmpty()) {
-            LoggerFactory.getLogger(this.getClass())
+            LogManager.getLogger(this.getClass())
                 .warn("Primary marketplace filters missing without excuse. This is deprecated and will eventually break.");
         }
         if ($secondary.isEmpty()) {
-            LoggerFactory.getLogger(this.getClass())
+            LogManager.getLogger(this.getClass())
                 .warn("Secondary marketplace filters missing without excuse. This is deprecated and will eventually break.");
         }
    }
@@ -176,18 +176,6 @@ secondaryMarketplaceFilterConditions returns [Collection<MarketplaceFilterCondit
 
 jointMarketplaceFilterCondition returns [MarketplaceFilterCondition result]:
     c1=regionCondition { $result = $c1.result; }
-    | c2=ratingCondition { $result = $c2.result; }
-    | c3=incomeCondition { $result = $c3.result; }
-    | c4=purposeCondition { $result = $c4.result; }
-    | c5=storyCondition { $result = $c5.result; }
-    | c6=termCondition { $result = $c6.result; }
-    | c8=interestCondition { $result = $c8.result; }
-    | c12=insuranceCondition { $result = $c12.result; }
-;
-
-primaryMarketplaceFilterCondition returns [MarketplaceFilterCondition result]:
-    c1=regionCondition { $result = $c1.result; }
-    | c2=ratingCondition { $result = $c2.result; }
     | c3=incomeCondition { $result = $c3.result; }
     | c4=purposeCondition { $result = $c4.result; }
     | c5=storyCondition { $result = $c5.result; }
@@ -195,19 +183,36 @@ primaryMarketplaceFilterCondition returns [MarketplaceFilterCondition result]:
     | c7=amountCondition { $result = $c7.result; }
     | c8=interestCondition { $result = $c8.result; }
     | c12=insuranceCondition { $result = $c12.result; }
+    | c14=annuityCondition { $result = $c14.result; }
+    | c15=revenueRateCondition { $result = $c15.result; }
 ;
 
-secondaryMarketplaceFilterCondition returns [MarketplaceFilterCondition result]:
+primaryMarketplaceFilterCondition returns [MarketplaceFilterCondition result]:
     c1=regionCondition { $result = $c1.result; }
-    | c2=ratingCondition { $result = $c2.result; }
     | c3=incomeCondition { $result = $c3.result; }
     | c4=purposeCondition { $result = $c4.result; }
     | c5=storyCondition { $result = $c5.result; }
     | c6=termCondition { $result = $c6.result; }
+    | c7=amountCondition { $result = $c7.result; }
+    | c8=interestCondition { $result = $c8.result; }
+    | c12=insuranceCondition { $result = $c12.result; }
+    | c14=annuityCondition { $result = $c14.result; }
+    | c15=revenueRateCondition { $result = $c15.result; }
+;
+
+secondaryMarketplaceFilterCondition returns [MarketplaceFilterCondition result]:
+    c1=regionCondition { $result = $c1.result; }
+    | c3=incomeCondition { $result = $c3.result; }
+    | c4=purposeCondition { $result = $c4.result; }
+    | c5=storyCondition { $result = $c5.result; }
+    | c6=termCondition { $result = $c6.result; }
+    | c7=amountCondition { $result = $c7.result; }
     | c8=interestCondition { $result = $c8.result; }
     | c9=relativeTermCondition { $result = $c9.result; }
     | c10=elapsedTermCondition { $result = $c10.result; }
     | c11=elapsedRelativeTermCondition { $result = $c11.result; }
     | c12=insuranceCondition { $result = $c12.result; }
-    | c13=remainingAmountCondition { $result = $c13.result; }
+    | c13=remainingPrincipalCondition { $result = $c13.result; }
+    | c14=annuityCondition { $result = $c14.result; }
+    | c15=revenueRateCondition { $result = $c15.result; }
 ;

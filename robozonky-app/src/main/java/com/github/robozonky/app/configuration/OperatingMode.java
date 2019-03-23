@@ -1,5 +1,5 @@
 /*
- * Copyright 2018 The RoboZonky Project
+ * Copyright 2019 The RoboZonky Project
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -16,46 +16,48 @@
 
 package com.github.robozonky.app.configuration;
 
-import java.time.Duration;
 import java.util.Optional;
-import java.util.function.Consumer;
+import java.util.function.Supplier;
 
 import com.github.robozonky.api.SessionInfo;
 import com.github.robozonky.api.confirmations.ConfirmationProvider;
-import com.github.robozonky.app.authentication.TenantBuilder;
 import com.github.robozonky.app.daemon.DaemonInvestmentMode;
-import com.github.robozonky.app.daemon.StrategyProvider;
-import com.github.robozonky.app.daemon.operations.Investor;
+import com.github.robozonky.app.daemon.Investor;
 import com.github.robozonky.app.events.Events;
-import com.github.robozonky.common.Tenant;
+import com.github.robozonky.app.events.SessionEvents;
+import com.github.robozonky.app.runtime.Lifecycle;
+import com.github.robozonky.app.tenant.PowerTenant;
+import com.github.robozonky.app.tenant.TenantBuilder;
 import com.github.robozonky.common.extensions.ConfirmationProviderLoader;
 import com.github.robozonky.common.extensions.ListenerServiceLoader;
 import com.github.robozonky.common.secrets.Credentials;
 import com.github.robozonky.common.secrets.SecretProvider;
-import com.github.robozonky.internal.api.Settings;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
+import com.github.robozonky.common.tenant.Tenant;
+import org.apache.logging.log4j.LogManager;
+import org.apache.logging.log4j.Logger;
 
 final class OperatingMode {
 
-    private static final Logger LOGGER = LoggerFactory.getLogger(OperatingMode.class);
+    private static final Logger LOGGER = LogManager.getLogger(OperatingMode.class);
 
-    private final Consumer<Throwable> shutdownCall;
+    private final Supplier<Lifecycle> lifecycle;
 
-    OperatingMode(final Consumer<Throwable> shutdownCall) {
-        this.shutdownCall = shutdownCall;
+    OperatingMode(final Supplier<Lifecycle> lifecycle) {
+        this.lifecycle = lifecycle;
     }
 
-    private static Tenant getAuthenticated(final CommandLine cli, final SecretProvider secrets) {
-        final Duration duration = Settings.INSTANCE.getTokenRefreshPeriod();
+    private static PowerTenant getTenant(final CommandLine cli, final Supplier<Lifecycle> lifecycle,
+                                         final SecretProvider secrets) {
         final TenantBuilder b = new TenantBuilder();
         if (cli.isDryRunEnabled()) {
             LOGGER.info("RoboZonky is doing a dry run. It will not invest any real money.");
             b.dryRun();
         }
         return b.withSecrets(secrets)
+                .withStrategy(cli.getStrategyLocation())
+                .withAvailabilityFrom(lifecycle)
                 .named(cli.getName())
-                .build(duration);
+                .build();
     }
 
     private static Optional<Investor> getInvestor(final Tenant tenant, final Credentials credentials,
@@ -80,33 +82,25 @@ final class OperatingMode {
                 });
     }
 
-    private static void configureNotifications(final CommandLine cli, final SessionInfo session) {
+    private static void configureNotifications(final CommandLine cli, final PowerTenant tenant) {
         // unregister if registered
+        final SessionInfo session = tenant.getSessionInfo();
         ListenerServiceLoader.unregisterConfiguration(session);
         // register if needed
         cli.getNotificationConfigLocation().ifPresent(cfg -> ListenerServiceLoader.registerConfiguration(session, cfg));
         // create event handler for this session, otherwise session-less notifications will not be sent
-        final Events e = Events.forSession(session);
+        final SessionEvents e = Events.forSession(tenant);
         LOGGER.debug("Notification subsystem initialized: {}.", e);
     }
 
-    private Optional<InvestmentMode> getInvestmentMode(final CommandLine cli, final Tenant auth,
-                                                       final Investor investor) {
-        final StrategyProvider sp = StrategyProvider.createFor(cli.getStrategyLocation());
-        final InvestmentMode m = new DaemonInvestmentMode(cli.getName(), shutdownCall, auth, investor, sp,
-                                                          cli.getPrimaryMarketplaceCheckDelay(),
-                                                          cli.getSecondaryMarketplaceCheckDelay());
-        return Optional.of(m);
-    }
-
     public Optional<InvestmentMode> configure(final CommandLine cli, final SecretProvider secrets) {
-        final Tenant tenant = getAuthenticated(cli, secrets);
-        configureNotifications(cli, tenant.getSessionInfo());
+        final PowerTenant tenant = getTenant(cli, lifecycle, secrets);
+        configureNotifications(cli, tenant);
         // and now initialize the chosen mode of operation
         return cli.getConfirmationCredentials()
                 .map(value -> new Credentials(value, secrets))
                 .map(c -> OperatingMode.getInvestor(tenant, c))
                 .orElse(Optional.of(Investor.build(tenant)))
-                .flatMap(i -> this.getInvestmentMode(cli, tenant, i));
+                .map(i -> new DaemonInvestmentMode(tenant, i, cli.getSecondaryMarketplaceCheckDelay()));
     }
 }

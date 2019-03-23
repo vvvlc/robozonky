@@ -1,5 +1,5 @@
 /*
- * Copyright 2018 The RoboZonky Project
+ * Copyright 2019 The RoboZonky Project
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -16,38 +16,57 @@
 
 package com.github.robozonky.app.daemon;
 
-import java.util.function.Supplier;
+import com.github.robozonky.app.tenant.PowerTenant;
+import jdk.jfr.Event;
+import org.apache.logging.log4j.LogManager;
+import org.apache.logging.log4j.Logger;
 
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
+import static com.github.robozonky.app.events.impl.EventFactory.roboZonkyDaemonFailed;
 
 final class Skippable implements Runnable {
 
-    private static final Logger LOGGER = LoggerFactory.getLogger(Skippable.class);
+    private static final Logger LOGGER = LogManager.getLogger(Skippable.class);
 
-    private final Supplier<Boolean> shouldBeSkipped;
+    private final PowerTenant tenant;
+    private final Class<?> type;
     private final Runnable toRun;
 
-    public Skippable(final Runnable toRun, final Supplier<Boolean> shouldBeSkipped) {
-        this.shouldBeSkipped = shouldBeSkipped;
+    public Skippable(final Runnable toRun, final Class<?> type, final PowerTenant tenant) {
         this.toRun = toRun;
+        this.type = type;
+        this.tenant = tenant;
+    }
+
+    Skippable(final Runnable toRun, final PowerTenant tenant) {
+        this.toRun = toRun;
+        this.type = toRun.getClass();
+        this.tenant = tenant;
     }
 
     @Override
     public void run() {
-        if (shouldBeSkipped.get()) {
-            LOGGER.trace("Not running {}.", toRun);
+        final Event event = new SkippableJfrEvent();
+        event.begin();
+        if (!tenant.isAvailable()) {
+            LOGGER.debug("Not running {} on account of Zonky token not being available.", this);
             return;
         }
-        LOGGER.trace("Running {}.", toRun);
-        toRun.run();
-        LOGGER.trace("Update finished.");
+        LOGGER.trace("Running {}.", this);
+        try {
+            toRun.run();
+            LOGGER.trace("Finished {}.", this);
+        } catch (final Exception ex) {
+            LOGGER.warn("Caught unexpected exception, continuing operation.", ex);
+            tenant.fire(roboZonkyDaemonFailed(ex));
+        } finally {
+            event.commit();
+        }
     }
 
     @Override
     public String toString() {
         return "Skippable{" +
-                "toRun=" + toRun +
+                "type=" + type.getCanonicalName() +
                 '}';
     }
 }

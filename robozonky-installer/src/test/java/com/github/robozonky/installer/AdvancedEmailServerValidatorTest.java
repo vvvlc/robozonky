@@ -1,5 +1,5 @@
 /*
- * Copyright 2018 The RoboZonky Project
+ * Copyright 2019 The RoboZonky Project
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -17,31 +17,26 @@
 package com.github.robozonky.installer;
 
 import java.util.UUID;
-import javax.mail.MessagingException;
-import javax.mail.Transport;
 
 import com.icegreen.greenmail.util.GreenMail;
 import com.icegreen.greenmail.util.ServerSetup;
 import com.icegreen.greenmail.util.ServerSetupTest;
 import com.izforge.izpack.api.data.InstallData;
 import com.izforge.izpack.api.installer.DataValidator;
+import org.apache.logging.log4j.LogManager;
+import org.apache.logging.log4j.Logger;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
 
-import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.*;
 import static org.assertj.core.api.SoftAssertions.assertSoftly;
-import static org.mockito.Mockito.eq;
-import static org.mockito.Mockito.mock;
-import static org.mockito.Mockito.verify;
-import static org.mockito.Mockito.when;
+import static org.mockito.Mockito.*;
 
 class AdvancedEmailServerValidatorTest {
 
     private static final GreenMail EMAIL = new GreenMail(getServerSetup());
-    private static final Logger LOGGER = LoggerFactory.getLogger(AdvancedEmailServerValidatorTest.class);
+    private static final Logger LOGGER = LogManager.getLogger(AdvancedEmailServerValidatorTest.class);
     private static final String PASSWORD = UUID.randomUUID().toString();
     private static final String USERNAME = "sender@server.cz";
 
@@ -100,7 +95,6 @@ class AdvancedEmailServerValidatorTest {
         final AdvancedEmailServerValidator validator = new AdvancedEmailServerValidator();
         final DataValidator.Status result = validator.validateData(data);
         assertThat(result).isEqualTo(DataValidator.Status.OK);
-        assertThat(validator.getTransport().getClosed()).isTrue();
     }
 
     @Test
@@ -118,14 +112,6 @@ class AdvancedEmailServerValidatorTest {
         final AdvancedEmailServerValidator validator = new AdvancedEmailServerValidator();
         final DataValidator.Status result = validator.validateData(data);
         assertThat(result).isEqualTo(DataValidator.Status.WARNING);
-        assertThat(validator.getTransport().getClosed()).isTrue();
     }
 
-    @Test
-    void closingTransport() throws MessagingException {
-        final Transport t = mock(Transport.class);
-        final AbstractEmailServerValidator.ClosingTransport ct = new AbstractEmailServerValidator.ClosingTransport(t);
-        ct.close();
-        verify(t).close();
-    }
 }

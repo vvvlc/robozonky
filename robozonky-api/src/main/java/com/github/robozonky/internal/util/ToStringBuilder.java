@@ -1,5 +1,5 @@
 /*
- * Copyright 2018 The RoboZonky Project
+ * Copyright 2019 The RoboZonky Project
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -17,38 +17,27 @@
 package com.github.robozonky.internal.util;
 
 import java.lang.reflect.Field;
-import java.lang.reflect.Modifier;
 import java.util.Arrays;
-import java.util.List;
-import java.util.Objects;
+import java.util.Collection;
 import java.util.stream.Stream;
 
+import org.apache.commons.lang3.StringUtils;
 import org.apache.commons.lang3.builder.ReflectionToStringBuilder;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
+import org.apache.logging.log4j.Logger;
 
 public final class ToStringBuilder {
 
-    private static final Logger LOGGER = LoggerFactory.getLogger(ToStringBuilder.class);
     private final ReflectionToStringBuilder builder;
 
     private ToStringBuilder(final Object o, final String... excludeFields) {
         final String[] fieldExclusions = Stream.concat(Stream.of("password"), Arrays.stream(excludeFields))
                 .distinct()
                 .toArray(String[]::new);
-        this.builder = new ToStringBuilder.CustomReflectionToStringBuilder(o)
-                .setExcludeFieldNames(fieldExclusions);
+        this.builder = new CustomReflectionToStringBuilder(o).setExcludeFieldNames(fieldExclusions);
     }
 
-    public static LazyInitialized<String> createFor(final Object o, final String... excludeFields) {
-        return LazyInitialized.create(() -> {
-            try {
-                return new ToStringBuilder(o, excludeFields).toString();
-            } catch (final Exception ex) {
-                LOGGER.debug("Error creating toString().", ex);
-                return "ERROR";
-            }
-        });
+    public static String createFor(final Object o, final String... excludeFields) {
+        return new ToStringBuilder(o, excludeFields).toString();
     }
 
     @Override
@@ -61,7 +50,7 @@ public final class ToStringBuilder {
         private static final int MAX_STRING_LENGTH = 70;
 
         // ignore passwords and loggers
-        private static final List<Class<?>> IGNORED_TYPES = Arrays.asList(char[].class, Logger.class);
+        private static final Collection<Class<?>> IGNORED_TYPES = Arrays.asList(char[].class, Logger.class);
 
         public CustomReflectionToStringBuilder(final Object o) {
             super(o);
@@ -69,21 +58,18 @@ public final class ToStringBuilder {
 
         @Override
         protected boolean accept(final Field field) {
-            return super.accept(field) && !Modifier.isStatic(field.getModifiers()) &&
-                    IGNORED_TYPES.stream().noneMatch(type -> Objects.equals(field.getType(), type));
+            return super.accept(field) && !IGNORED_TYPES.contains(field.getType());
         }
 
         @Override
         protected Object getValue(final Field field) throws IllegalAccessException {
             final Object value = super.getValue(field);
-            if (value != null && Objects.equals(field.getType(), String.class)) { // long strings will get truncated
+            if (value instanceof String) { // long strings will get truncated
                 final String stringValue = (String) value;
-                final int length = ToStringBuilder.CustomReflectionToStringBuilder.MAX_STRING_LENGTH;
-                if (stringValue.length() > length) {
-                    return stringValue.substring(0, length) + "...";
-                }
+                return StringUtils.abbreviate(stringValue, MAX_STRING_LENGTH);
+            } else {
+                return value;
             }
-            return value;
         }
     }
 }

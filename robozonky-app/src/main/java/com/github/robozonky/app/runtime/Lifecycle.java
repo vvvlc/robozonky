@@ -1,5 +1,5 @@
 /*
- * Copyright 2018 The RoboZonky Project
+ * Copyright 2019 The RoboZonky Project
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -16,29 +16,30 @@
 
 package com.github.robozonky.app.runtime;
 
+import java.time.OffsetDateTime;
+import java.util.HashSet;
 import java.util.Optional;
+import java.util.Set;
 import java.util.concurrent.CountDownLatch;
 
 import com.github.robozonky.app.ShutdownHook;
-import com.github.robozonky.internal.util.LazyInitialized;
-import com.github.robozonky.util.Schedulers;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
-
-;
+import com.github.robozonky.common.management.Management;
+import com.github.robozonky.common.management.ManagementBean;
+import io.vavr.Lazy;
+import org.apache.logging.log4j.LogManager;
+import org.apache.logging.log4j.Logger;
 
 /**
  * This class controls the internals of the application. It provides ways of blocking certain robot operations until
- * network is available and Zonky is up. It will automatically {@link Schedulers#pause()} if it detects it is offline.
+ * network is available and Zonky is up.
  */
 public class Lifecycle {
 
-    private static final Logger LOGGER = LoggerFactory.getLogger(Lifecycle.class);
-
+    private static final Logger LOGGER = LogManager.getLogger(Lifecycle.class);
+    private static final Set<Thread> HOOKS = new HashSet<>(0);
     private final CountDownLatch circuitBreaker;
     private final MainControl livenessCheck;
-    private final LazyInitialized<DaemonShutdownHook> shutdownHook;
-    private volatile Throwable terminationCause = null;
+    private final Lazy<DaemonShutdownHook> shutdownHook;
 
     /**
      * For testing purposes only.
@@ -49,10 +50,6 @@ public class Lifecycle {
 
     public Lifecycle(final ShutdownHook hooks) {
         this(new CountDownLatch(1), hooks);
-    }
-
-    Lifecycle(final CountDownLatch circuitBreaker) {
-        this(circuitBreaker, new ShutdownHook());
     }
 
     private Lifecycle(final CountDownLatch circuitBreaker, final ShutdownHook hooks) {
@@ -67,9 +64,19 @@ public class Lifecycle {
         this.circuitBreaker = circuitBreaker;
         this.livenessCheck = mc;
         final ShutdownEnabler shutdownEnabler = new ShutdownEnabler();
-        this.shutdownHook = LazyInitialized.create(() -> new DaemonShutdownHook(this, shutdownEnabler));
-        hooks.register(LivenessCheck.setup(livenessCheck));
+        this.shutdownHook = Lazy.of(() -> new DaemonShutdownHook(this, shutdownEnabler));
+        final ManagementBean<AboutMBean> managementBean = new ManagementBean<>(AboutMBean.class, () -> new About(this));
+        Management.register(managementBean);
+        LivenessCheck.setup(livenessCheck);
         hooks.register(shutdownEnabler);
+    }
+
+    /**
+     * For testing purposes. PITest mutations would start these and not kill them, leading to stuck processes.
+     */
+    public static void clearShutdownHooks() {
+        HOOKS.forEach(h -> Runtime.getRuntime().removeShutdownHook(h));
+        HOOKS.clear();
     }
 
     /**
@@ -86,8 +93,16 @@ public class Lifecycle {
         }
     }
 
-    public Optional<String> getZonkyApiVersion() {
+    Optional<String> getZonkyApiVersion() {
         return livenessCheck.getApiVersion();
+    }
+
+    OffsetDateTime getZonkyApiLastUpdate() {
+        return livenessCheck.getTimestamp();
+    }
+
+    public boolean isOnline() {
+        return getZonkyApiVersion().isPresent();
     }
 
     /**
@@ -99,10 +114,12 @@ public class Lifecycle {
     }
 
     /**
-     * Suspend thread until either one of {@link #resumeToFail(Throwable)} or {@link #resumeToShutdown()} is called.
+     * Suspend thread until {@link #resume()} is called.
      */
     public void suspend() {
-        Runtime.getRuntime().addShutdownHook(shutdownHook.get());
+        final Thread t = shutdownHook.get();
+        Runtime.getRuntime().addShutdownHook(t);
+        HOOKS.add(t);
         LOGGER.debug("Pausing main thread.");
         try {
             circuitBreaker.await();
@@ -114,26 +131,9 @@ public class Lifecycle {
     /**
      * Triggered by the daemon to make {@link #suspend()} unblock.
      */
-    public void resumeToShutdown() {
+    public void resume() {
         LOGGER.debug("Asking application to shut down cleanly through {}.", this);
         circuitBreaker.countDown();
     }
 
-    /**
-     * Triggered by the deamon to make {@link #suspend()} unblock.
-     * @param t Will become the value in {@link #getTerminationCause()}.
-     */
-    public void resumeToFail(final Throwable t) {
-        LOGGER.debug("Asking application to die through {}.", this);
-        terminationCause = t;
-        circuitBreaker.countDown();
-    }
-
-    /**
-     * The reason why the daemon failed, if any.
-     * @return Present if {@link #resumeToFail(Throwable)} had been called previously.
-     */
-    public Optional<Throwable> getTerminationCause() {
-        return Optional.ofNullable(terminationCause);
-    }
 }

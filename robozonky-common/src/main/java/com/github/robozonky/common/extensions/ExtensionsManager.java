@@ -1,5 +1,5 @@
 /*
- * Copyright 2018 The RoboZonky Project
+ * Copyright 2019 The RoboZonky Project
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -19,13 +19,12 @@ package com.github.robozonky.common.extensions;
 import java.io.File;
 import java.net.URL;
 import java.net.URLClassLoader;
-import java.util.Collection;
+import java.util.Arrays;
 import java.util.ServiceLoader;
 
-import com.github.robozonky.internal.util.LazyInitialized;
-import com.github.robozonky.util.FileUtil;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
+import io.vavr.Lazy;
+import org.apache.logging.log4j.LogManager;
+import org.apache.logging.log4j.Logger;
 
 /**
  * Ensures that all extensions, available in the current working directory's "extensions/" subdirectory, will be on
@@ -37,20 +36,26 @@ enum ExtensionsManager {
 
     INSTANCE; // cheap thread-safe singleton
 
-    private final Logger LOGGER = LoggerFactory.getLogger(ExtensionsManager.class);
+    private final Logger logger = LogManager.getLogger(ExtensionsManager.class);
+
+    private static boolean isJarFile(final File f) {
+        return f.isFile() && f.getPath().toLowerCase().endsWith(".jar");
+    }
 
     ClassLoader retrieveExtensionClassLoader(final File extensionsFolder) {
-        this.LOGGER.debug("Using extensions folder: '{}'.", extensionsFolder.getAbsolutePath());
-        final Collection<URL> urls =
-                FileUtil.filesToUrls(extensionsFolder.listFiles(f -> f.getPath().toLowerCase().endsWith(".jar")));
-        return new URLClassLoader(urls.toArray(new URL[0]));
+        logger.debug("Using extensions folder: '{}'.", extensionsFolder.getAbsolutePath());
+        final File[] jars = extensionsFolder.listFiles(ExtensionsManager::isJarFile);
+        final String jarString = Arrays.toString(jars);
+        logger.debug("JARS found: '{}'.", jarString);
+        final URL[] urls = FileUtil.filesToUrls(jars).toArray(URL[]::new);
+        return new URLClassLoader(urls);
     }
 
     ClassLoader retrieveExtensionClassLoader(final String folderName) {
         return FileUtil.findFolder(folderName)
                 .map(this::retrieveExtensionClassLoader)
                 .orElseGet(() -> {
-                    this.LOGGER.debug("Extensions folder not found.");
+                    logger.debug("Extensions folder not found.");
                     return ExtensionsManager.class.getClassLoader();
                 });
     }
@@ -62,12 +67,12 @@ enum ExtensionsManager {
      * loader initialization throws an exception, the parent class will fail to load and we will get a
      * NoClassDefFoundError which gives us no information as to why it happened.
      */
-    public <T> LazyInitialized<ServiceLoader<T>> getServiceLoader(final Class<T> serviceClass) {
-        return LazyInitialized.create(() -> getServiceLoader(serviceClass, "extensions"));
+    public <T> Lazy<ServiceLoader<T>> getServiceLoader(final Class<T> serviceClass) {
+        return Lazy.of(() -> getServiceLoader(serviceClass, "extensions"));
     }
 
     <T> ServiceLoader<T> getServiceLoader(final Class<T> serviceClass, final String folderName) {
-        this.LOGGER.debug("Retrieving service loader for '{}'.", serviceClass);
+        logger.debug("Retrieving service loader for '{}'.", serviceClass);
         return ServiceLoader.load(serviceClass, this.retrieveExtensionClassLoader(folderName));
     }
 

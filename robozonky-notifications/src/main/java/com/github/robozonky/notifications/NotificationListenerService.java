@@ -1,5 +1,5 @@
 /*
- * Copyright 2018 The RoboZonky Project
+ * Copyright 2019 The RoboZonky Project
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -27,16 +27,16 @@ import com.github.robozonky.api.SessionInfo;
 import com.github.robozonky.api.notifications.Event;
 import com.github.robozonky.api.notifications.EventListenerSupplier;
 import com.github.robozonky.api.notifications.ListenerService;
+import com.github.robozonky.common.async.Tasks;
 import com.github.robozonky.common.extensions.ListenerServiceLoader;
 import com.github.robozonky.common.state.TenantState;
 import com.github.robozonky.internal.api.Settings;
-import com.github.robozonky.util.Scheduler;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
+import org.apache.logging.log4j.LogManager;
+import org.apache.logging.log4j.Logger;
 
 public final class NotificationListenerService implements ListenerService {
 
-    private static final Logger LOGGER = LoggerFactory.getLogger(NotificationListenerService.class);
+    private static final Logger LOGGER = LogManager.getLogger(NotificationListenerService.class);
 
     private final Map<String, RefreshableConfigStorage> CONFIGURATIONS = new HashMap<>(0);
 
@@ -61,7 +61,7 @@ public final class NotificationListenerService implements ListenerService {
             final String config = value.get();
             readConfig(config).ifPresent(props -> {
                 LOGGER.debug("Initializing notifications for '{}' from {}.", username, config);
-                Scheduler.inBackground().submit(props, Settings.INSTANCE.getRemoteResourceRefreshInterval());
+                Tasks.SUPPORTING.scheduler().submit(props, Settings.INSTANCE.getRemoteResourceRefreshInterval());
                 CONFIGURATIONS.put(username, props);
             });
         }
@@ -69,8 +69,7 @@ public final class NotificationListenerService implements ListenerService {
     }
 
     private Stream<RefreshableConfigStorage> getTenantConfigurations() {
-        return TenantState.getKnownTenants().stream()
-                .map(SessionInfo::new)
+        return TenantState.getKnownTenants()
                 .map(this::getTenantConfigurations)
                 .flatMap(o -> o.map(Stream::of).orElse(Stream.empty()));
     }

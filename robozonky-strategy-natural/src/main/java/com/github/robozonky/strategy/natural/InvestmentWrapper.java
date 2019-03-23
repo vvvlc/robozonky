@@ -1,5 +1,5 @@
 /*
- * Copyright 2018 The RoboZonky Project
+ * Copyright 2019 The RoboZonky Project
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -45,7 +45,12 @@ final class InvestmentWrapper extends AbstractLoanWrapper<InvestmentDescriptor> 
 
     @Override
     public BigDecimal getInterestRate() {
-        return investment.getInterestRate();
+        return adjustRateForStrategy(investment.getInterestRate());
+    }
+
+    @Override
+    public BigDecimal getRevenueRate() {
+        return adjustRateForStrategy(investment.getRevenueRate());
     }
 
     @Override
@@ -71,6 +76,11 @@ final class InvestmentWrapper extends AbstractLoanWrapper<InvestmentDescriptor> 
     @Override
     public int getOriginalAmount() {
         return getLoan().getAmount();
+    }
+
+    @Override
+    public int getOriginalAnnuity() {
+        return getLoan().getAnnuity().intValue();
     }
 
     @Override

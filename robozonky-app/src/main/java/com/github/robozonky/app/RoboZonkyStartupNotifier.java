@@ -1,5 +1,5 @@
 /*
- * Copyright 2018 The RoboZonky Project
+ * Copyright 2019 The RoboZonky Project
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -17,19 +17,18 @@
 package com.github.robozonky.app;
 
 import java.util.Optional;
-import java.util.concurrent.CompletableFuture;
 import java.util.function.Consumer;
 
+import com.github.robozonky.api.SessionInfo;
 import com.github.robozonky.api.notifications.RoboZonkyEndingEvent;
 import com.github.robozonky.api.notifications.RoboZonkyInitializedEvent;
 import com.github.robozonky.app.events.Events;
 import com.github.robozonky.internal.api.Defaults;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
+import org.apache.logging.log4j.LogManager;
+import org.apache.logging.log4j.Logger;
 
-import static com.github.robozonky.app.events.EventFactory.roboZonkyCrashed;
-import static com.github.robozonky.app.events.EventFactory.roboZonkyEnding;
-import static com.github.robozonky.app.events.EventFactory.roboZonkyInitialized;
+import static com.github.robozonky.app.events.impl.EventFactory.roboZonkyEnding;
+import static com.github.robozonky.app.events.impl.EventFactory.roboZonkyInitialized;
 
 /**
  * Will send {@link RoboZonkyInitializedEvent} immediately and {@link RoboZonkyEndingEvent} when it's time to shut down
@@ -37,36 +36,27 @@ import static com.github.robozonky.app.events.EventFactory.roboZonkyInitialized;
  */
 class RoboZonkyStartupNotifier implements ShutdownHook.Handler {
 
-    private static final Logger LOGGER = LoggerFactory.getLogger(RoboZonkyStartupNotifier.class);
+    private static final Logger LOGGER = LogManager.getLogger(RoboZonkyStartupNotifier.class);
 
     private final String sessionName;
 
-    public RoboZonkyStartupNotifier(final String sessionName) {
-        this.sessionName = sessionName;
-    }
-
-    private static CompletableFuture<Void> execute(final ShutdownHook.Result result) {
-        if (result.getReturnCode() == ReturnCode.OK) {
-            return Events.allSessions().fire(roboZonkyEnding());
-        } else {
-            return Events.allSessions().fire(roboZonkyCrashed(result.getCause()));
-        }
+    public RoboZonkyStartupNotifier(final SessionInfo session) {
+        this.sessionName = session.getName();
     }
 
     @Override
     public Optional<Consumer<ShutdownHook.Result>> get() {
-        final String name = sessionName == null ? "RoboZonky" : "RoboZonky '" + sessionName + "'";
-        LOGGER.info("===== {} v{} at your service! =====", name, Defaults.ROBOZONKY_VERSION);
-        Events.allSessions().fire(roboZonkyInitialized());
+        LOGGER.info("===== {} v{} at your service! =====", sessionName, Defaults.ROBOZONKY_VERSION);
+        Events.global().fire(roboZonkyInitialized());
         return Optional.of(result -> {
-            final CompletableFuture<Void> waitUntilFired = execute(result);
+            final Runnable waitUntilFired = Events.global().fire(roboZonkyEnding());
             try {
                 LOGGER.debug("Waiting for events to be processed.");
-                waitUntilFired.join();
+                waitUntilFired.run();
             } catch (final Exception ex) {
                 LOGGER.debug("Exception while waiting for the final event being processed.", ex);
             } finally {
-                LOGGER.info("===== {} out. =====", name);
+                LOGGER.info("===== {} out. =====", sessionName);
             }
         });
     }

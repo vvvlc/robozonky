@@ -1,5 +1,5 @@
 /*
- * Copyright 2018 The RoboZonky Project
+ * Copyright 2019 The RoboZonky Project
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -31,8 +31,9 @@ import java.util.function.BiFunction;
 import java.util.function.Function;
 
 import com.github.robozonky.api.SessionInfo;
-import com.github.robozonky.common.Tenant;
+import com.github.robozonky.common.tenant.Tenant;
 import com.github.robozonky.internal.api.Defaults;
+import com.github.robozonky.internal.util.DateUtil;
 import com.google.api.client.auth.oauth2.Credential;
 import com.google.api.client.http.HttpTransport;
 import com.google.api.services.drive.Drive;
@@ -46,12 +47,12 @@ import com.google.api.services.sheets.v4.model.Sheet;
 import com.google.api.services.sheets.v4.model.SheetProperties;
 import com.google.api.services.sheets.v4.model.Spreadsheet;
 import com.google.api.services.sheets.v4.model.UpdateSheetPropertiesRequest;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
+import org.apache.logging.log4j.LogManager;
+import org.apache.logging.log4j.Logger;
 
 class Stonky implements Function<Tenant, Optional<String>> {
 
-    private static final Logger LOGGER = LoggerFactory.getLogger(Stonky.class);
+    private static final Logger LOGGER = LogManager.getLogger(Stonky.class);
 
     private final HttpTransport transport;
     private final CredentialProvider credentialSupplier;
@@ -142,7 +143,7 @@ class Stonky implements Function<Tenant, Optional<String>> {
             LOGGER.debug("Making a backup of the existing spreadsheet.");
             final Instant lastModified = Instant.EPOCH.plus(Duration.ofMillis(s.getModifiedTime().getValue()));
             final LocalDate d = lastModified.atZone(Defaults.ZONE_ID).toLocalDate();
-            if (d.isBefore(LocalDate.now())) {
+            if (d.isBefore(DateUtil.localNow().toLocalDate())) {
                 Util.copyFile(driveService, s, o.getFolder(), d + " " + s.getName());
             }
             final Spreadsheet result = sheetsService.spreadsheets().get(s.getId()).execute();

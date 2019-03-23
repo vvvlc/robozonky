@@ -1,5 +1,5 @@
 /*
- * Copyright 2017 The RoboZonky Project
+ * Copyright 2019 The RoboZonky Project
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -19,7 +19,6 @@ package com.github.robozonky.api.remote.enums;
 import java.io.IOException;
 import java.util.ArrayList;
 import java.util.Collection;
-import java.util.stream.Stream;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
 import org.junit.jupiter.api.DynamicTest;
@@ -58,6 +57,11 @@ class SerializationTest {
     Collection<DynamicTest> deserialize() {
         final Collection<DynamicTest> tests = new ArrayList<>(0);
         // test deserialization of all income types
+        for (final OAuthScope toSerialize : OAuthScope.values()) {
+            final String serialized = escape(toSerialize.name());
+            tests.add(dynamicTest(deserializeTestName(toSerialize), () -> deserialize(serialized, toSerialize)));
+        }
+        // test deserialization of all income types
         for (final MainIncomeType toSerialize : MainIncomeType.values()) {
             final String serialized = escape(toSerialize.name());
             tests.add(dynamicTest(deserializeTestName(toSerialize), () -> deserialize(serialized, toSerialize)));
@@ -73,9 +77,7 @@ class SerializationTest {
             tests.add(dynamicTest(deserializeTestName(toSerialize), () -> deserialize(serialized, toSerialize)));
         }
         // test that deserialization of invalid value properly fails
-        Stream.of(Region.class, Purpose.class, MainIncomeType.class)
-                .forEach(clz -> tests.add(dynamicTest("invalid " + clz.getSimpleName(),
-                                                      () -> deserialize(clz))));
+        tests.add(dynamicTest("invalid " + Purpose.class.getSimpleName(), () -> deserialize(Purpose.class)));
         return tests;
     }
 }

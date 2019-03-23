@@ -1,5 +1,5 @@
 /*
- * Copyright 2018 The RoboZonky Project
+ * Copyright 2019 The RoboZonky Project
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -17,19 +17,17 @@
 package com.github.robozonky.common.remote;
 
 import java.util.List;
-import java.util.concurrent.ForkJoinPool;
 import java.util.function.Function;
 import java.util.function.Supplier;
 
 import com.github.robozonky.api.remote.entities.ZonkyApiToken;
-import com.github.robozonky.util.BlockingOperation;
+import org.apache.logging.log4j.LogManager;
+import org.apache.logging.log4j.Logger;
 import org.jboss.resteasy.client.jaxrs.ResteasyClient;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
 
 class PaginatedApi<S, T> {
 
-    private static final Logger LOGGER = LoggerFactory.getLogger(PaginatedApi.class);
+    private static final Logger LOGGER = LogManager.getLogger(PaginatedApi.class);
 
     private final Class<T> api;
     private final String url;
@@ -64,18 +62,8 @@ class PaginatedApi<S, T> {
     }
 
     <Q> Q execute(final Function<T, Q> function, final RoboZonkyFilter filter) {
-        LOGGER.trace("Executing...");
         final T proxy = ProxyFactory.newProxy(client, filter, api, url);
-        try {
-            final BlockingOperation<Q> operation = new BlockingOperation<>(() -> function.apply(proxy));
-            ForkJoinPool.managedBlock(operation);
-            return operation.getResult();
-        } catch (final InterruptedException ex) {
-            Thread.currentThread().interrupt();
-            return null;
-        } finally {
-            LOGGER.trace("... done.");
-        }
+        return Api.call(function, proxy);
     }
 
     public PaginatedResult<S> execute(final Function<T, List<S>> function, final Select select, final int pageNo,

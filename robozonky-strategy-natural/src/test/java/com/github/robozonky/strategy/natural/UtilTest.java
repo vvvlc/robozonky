@@ -1,5 +1,5 @@
 /*
- * Copyright 2018 The RoboZonky Project
+ * Copyright 2019 The RoboZonky Project
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -30,10 +30,10 @@ import com.github.robozonky.api.strategies.PortfolioOverview;
 import com.github.robozonky.test.AbstractRoboZonkyTest;
 import org.junit.jupiter.api.Test;
 
-import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.*;
 import static org.assertj.core.api.SoftAssertions.assertSoftly;
 import static org.mockito.ArgumentMatchers.eq;
-import static org.mockito.Mockito.when;
+import static org.mockito.Mockito.*;
 
 class UtilTest extends AbstractRoboZonkyTest {
 
@@ -94,5 +94,33 @@ class UtilTest extends AbstractRoboZonkyTest {
         // B > C > A
         portfolio = preparePortfolio(BigDecimal.valueOf(0.0099), BigDecimal.ZERO, BigDecimal.valueOf(0.249));
         assertOrder(Util.rankRatingsByDemand(parsedStrategy, ratings, portfolio), Rating.B, Rating.C, Rating.A);
+    }
+
+    @Test
+    void acceptable() {
+        final ParsedStrategy s = mock(ParsedStrategy.class);
+        when(s.getMinimumBalance()).thenReturn(999l);
+        when(s.getMaximumInvestmentSizeInCzk()).thenReturn(1000l);
+        final PortfolioOverview p = mockPortfolioOverview(1_000);
+        when(p.getCzkInvested()).thenReturn(BigDecimal.valueOf(999));
+        assertThat(Util.isAcceptable(s, p)).isTrue();
+    }
+
+    @Test
+    void unacceptableDueToCeiling() {
+        final ParsedStrategy s = mock(ParsedStrategy.class);
+        when(s.getMinimumBalance()).thenReturn(0l);
+        when(s.getMaximumInvestmentSizeInCzk()).thenReturn(10_000l);
+        final PortfolioOverview p = mockPortfolioOverview(10_000);
+        when(p.getCzkInvested()).thenReturn(BigDecimal.valueOf(10_000));
+        assertThat(Util.isAcceptable(s, p)).isFalse();
+    }
+
+    @Test
+    void unacceptableDueToLowBalance() {
+        final ParsedStrategy s = mock(ParsedStrategy.class);
+        when(s.getMinimumBalance()).thenReturn(1000l);
+        final PortfolioOverview p = mockPortfolioOverview(1000);
+        assertThat(Util.isAcceptable(s, p)).isFalse();
     }
 }

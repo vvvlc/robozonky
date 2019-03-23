@@ -1,5 +1,5 @@
 /*
- * Copyright 2018 The RoboZonky Project
+ * Copyright 2019 The RoboZonky Project
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -24,23 +24,27 @@ import java.util.concurrent.atomic.LongAdder;
 import com.github.robozonky.internal.api.Defaults;
 import org.junit.jupiter.api.Test;
 
-import static org.assertj.core.api.Assertions.assertThat;
-import static org.assertj.core.api.Assertions.assertThatThrownBy;
+import static org.assertj.core.api.Assertions.*;
 
 class StrategyValidationFeatureTest {
 
     private static final String STRATEGY_MISSING_SELL = "- Obecná nastavení\n" +
             "Robot má udržovat konzervativní portfolio.\n" +
+            "Robot má pravidelně kontrolovat rezervační systém " +
+            "a přijímat rezervace půjček odpovídajících této strategii.\n" +
             "Běžná výše investice je 200 Kč.\n" +
             "Investovat do všech půjček a participací.\n" +
             "Prodej participací zakázán.";
     private static final String STRATEGY_MISSING_EVERYTHING = "- Obecná nastavení\n" +
             "Robot má udržovat konzervativní portfolio.\n" +
+            "Robot má zcela ignorovat rezervační systém.\n" +
             "Běžná výše investice je 200 Kč.\n" +
             "Ignorovat všechny půjčky i participace.\n" +
             "Prodej participací zakázán.";
     private static final String STRATEGY_WITH_EVERYTHING = "- Obecná nastavení\n" +
             "Robot má udržovat konzervativní portfolio.\n" +
+            "Robot má převzít kontrolu nad rezervačním systémem " +
+            "a přijímat rezervace půjček odpovídajících této strategii.\n" +
             "Běžná výše investice je 200 Kč.\n" +
             "\n" +
             "- Filtrování tržiště\n" +
@@ -48,7 +52,7 @@ class StrategyValidationFeatureTest {
             "Investovat do všech participací.\n" +
             "\n" +
             "- Prodej participací\n" +
-            "Prodat participaci, kde: rating je lepší než A*.";
+            "Prodat participaci, kde: úrok nedosahuje 5,0 % p.a.";
 
     @Test
     void failsOnNonExistentFile() throws IOException {
@@ -84,7 +88,7 @@ class StrategyValidationFeatureTest {
         final Feature feature = new StrategyValidationFeature(f, adder);
         feature.setup();
         feature.test();
-        assertThat(adder.sum()).as("Strategy count with sell missing.").isEqualTo(2);
+        assertThat(adder.sum()).as("Strategy count with sell missing.").isEqualTo(3);
     }
 
     @Test
@@ -96,7 +100,7 @@ class StrategyValidationFeatureTest {
         feature.setup();
         feature.test();
         feature.test();
-        assertThat(adder.sum()).as("Strategy count with sell missing.").isEqualTo(2);
+        assertThat(adder.sum()).as("Strategy count with sell missing.").isEqualTo(3);
     }
 
     @Test
@@ -107,6 +111,6 @@ class StrategyValidationFeatureTest {
         final Feature feature = new StrategyValidationFeature(f, adder);
         feature.setup();
         feature.test();
-        assertThat(adder.sum()).as("Strategy count has everything.").isEqualTo(3);
+        assertThat(adder.sum()).as("Strategy count has everything.").isEqualTo(4);
     }
 }

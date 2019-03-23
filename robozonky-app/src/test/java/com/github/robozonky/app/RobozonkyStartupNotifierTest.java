@@ -1,5 +1,5 @@
 /*
- * Copyright 2018 The RoboZonky Project
+ * Copyright 2019 The RoboZonky Project
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -17,29 +17,25 @@
 package com.github.robozonky.app;
 
 import java.util.Optional;
-import java.util.UUID;
 import java.util.function.Consumer;
 
-import com.github.robozonky.api.notifications.RoboZonkyCrashedEvent;
 import com.github.robozonky.api.notifications.RoboZonkyEndingEvent;
 import com.github.robozonky.api.notifications.RoboZonkyInitializedEvent;
+import com.github.robozonky.app.events.AbstractEventLeveragingTest;
 import org.junit.jupiter.api.Test;
 
-import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.*;
 
 class RobozonkyStartupNotifierTest extends AbstractEventLeveragingTest {
 
     @Test
     void properEventsFired() {
-        final RoboZonkyStartupNotifier rzsn = new RoboZonkyStartupNotifier(UUID.randomUUID().toString());
+        final RoboZonkyStartupNotifier rzsn = new RoboZonkyStartupNotifier(SESSION);
         final Optional<Consumer<ShutdownHook.Result>> result = rzsn.get();
         assertThat(result).isPresent();
         assertThat(this.getEventsRequested()).last().isInstanceOf(RoboZonkyInitializedEvent.class);
-        final ShutdownHook.Result r = new ShutdownHook.Result(ReturnCode.OK, null);
+        final ShutdownHook.Result r = new ShutdownHook.Result(ReturnCode.OK);
         result.get().accept(r);
         assertThat(this.getEventsRequested()).last().isInstanceOf(RoboZonkyEndingEvent.class);
-        final ShutdownHook.Result r2 = new ShutdownHook.Result(ReturnCode.ERROR_SETUP, null);
-        result.get().accept(r2);
-        assertThat(this.getEventsRequested()).last().isInstanceOf(RoboZonkyCrashedEvent.class);
     }
 }

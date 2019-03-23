@@ -1,5 +1,5 @@
 /*
- * Copyright 2018 The RoboZonky Project
+ * Copyright 2019 The RoboZonky Project
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -17,7 +17,10 @@
 package com.github.robozonky.api.remote.entities.sanitized;
 
 import java.math.BigDecimal;
+import java.net.MalformedURLException;
+import java.net.URL;
 import java.time.OffsetDateTime;
+import java.util.Collections;
 import java.util.Optional;
 import java.util.function.Function;
 import java.util.function.Supplier;
@@ -35,9 +38,9 @@ import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 
-import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.*;
 import static org.assertj.core.api.SoftAssertions.assertSoftly;
-import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.*;
 
 @ExtendWith(MockitoExtension.class)
 class LoanTest {
@@ -49,6 +52,11 @@ class LoanTest {
     @DisplayName("Sanitization works.")
     void sanitizing() {
         assertThat(Loan.sanitized(mocked)).isNotNull();
+    }
+
+    @Test
+    void hasToString() {
+        assertThat(Loan.custom().build().toString()).isNotEmpty();
     }
 
     @Nested
@@ -79,7 +87,7 @@ class LoanTest {
 
         private <T> void integer(final LoanBuilder builder, final Function<Integer, LoanBuilder> setter,
                                  final Supplier<Integer> getter, final int value) {
-            assertThat(getter.get()).as("False before setting.").isLessThanOrEqualTo(0);
+            assertThat(getter.get()).as("Zero before setting.").isLessThanOrEqualTo(0);
             final LoanBuilder newBuilder = setter.apply(value);
             assertSoftly(softly -> {
                 softly.assertThat(newBuilder).as("Setter returned itself.").isSameAs(builder);
@@ -128,6 +136,16 @@ class LoanTest {
         }
 
         @Test
+        void borrowerNicknames() {
+            standard(b, b::setKnownBorrowerNicknames, b::getKnownBorrowerNicknames, Collections.singleton("someone"));
+        }
+
+        @Test
+        void emptyBorrowerNicknames() {
+            standard(b, b::setKnownBorrowerNicknames, b::getKnownBorrowerNicknames, Collections.emptySet());
+        }
+
+        @Test
         void region() {
             standard(b, b::setRegion, b::getRegion, Region.JIHOCESKY);
         }
@@ -160,6 +178,16 @@ class LoanTest {
         @Test
         void investmentRate() {
             standard(b, b::setInvestmentRate, b::getInvestmentRate, BigDecimal.ONE);
+        }
+
+        @Test
+        void annuity() {
+            standard(b, b::setAnnuity, b::getAnnuity, BigDecimal.ONE);
+        }
+
+        @Test
+        void revenueRate() {
+            standard(b, b::setRevenueRate, b::getRevenueRate, BigDecimal.ONE);
         }
 
         @Test
@@ -218,6 +246,11 @@ class LoanTest {
         }
 
         @Test
+        void nonReservedRemainingInvestment() {
+            integer(b, b::setNonReservedRemainingInvestment, b::getNonReservedRemainingInvestment, 1);
+        }
+
+        @Test
         void investmentsCount() {
             integer(b, b::setInvestmentsCount, b::getInvestmentsCount, 1);
         }
@@ -236,5 +269,11 @@ class LoanTest {
         void userId() {
             integer(b, b::setUserId, b::getUserId, 1);
         }
+
+        @Test
+        void url() throws MalformedURLException {
+            standard(b, b::setUrl, b::getUrl, new URL("http://www.zonky.cz/"));
+        }
+
     }
 }

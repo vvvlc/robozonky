@@ -1,5 +1,5 @@
 /*
- * Copyright 2018 The RoboZonky Project
+ * Copyright 2019 The RoboZonky Project
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -24,6 +24,7 @@ import java.net.SocketTimeoutException;
 import java.time.LocalDate;
 import java.time.OffsetDateTime;
 import java.time.Period;
+import java.time.ZonedDateTime;
 import java.util.Collection;
 import java.util.Comparator;
 import java.util.Date;
@@ -43,12 +44,14 @@ import com.github.robozonky.api.remote.entities.sanitized.MarketplaceLoan;
 import com.github.robozonky.api.remote.enums.Rating;
 import com.github.robozonky.api.strategies.PortfolioOverview;
 import com.github.robozonky.internal.api.Defaults;
+import com.github.robozonky.internal.util.DateUtil;
 import com.github.robozonky.internal.util.Maps;
 
 import static com.github.robozonky.internal.util.Maps.entry;
 
 final class Util {
 
+    private static final BigDecimal HUNDRED = BigDecimal.TEN.pow(2);
     private static final String AT = "@";
     private static final Pattern COMPILE = Pattern.compile("\\Q" + AT + "\\E");
 
@@ -64,8 +67,14 @@ final class Util {
         return Date.from(offsetDateTime.toInstant());
     }
 
+    private static Date toDate(final ZonedDateTime zonedDateTime) {
+        return Date.from(zonedDateTime.toInstant());
+    }
+
     private static String identifyLoan(final MarketplaceLoan loan) {
-        return "č. " + loan.getId() + " (" + loan.getRating().getCode() + ", " + loan.getTermInMonths() + " m.)";
+        final BigDecimal interestRate = loan.getInterestRate().multiply(HUNDRED);
+        // string formatting ensures proper locale-specific floating point separator
+        return String.format("č. %d (%.2f %% p.a., %d m.)", loan.getId(), interestRate, loan.getTermInMonths());
     }
 
     public static String identifyLoan(final MarketplaceLoanBased event) {
@@ -80,7 +89,9 @@ final class Util {
         return Maps.ofEntries(
                 entry("loanId", loan.getId()),
                 entry("loanAmount", loan.getAmount()),
-                entry("loanRating", loan.getRating().getCode()),
+                entry("loanAnnuity", loan.getAnnuity().intValue()),
+                entry("loanInterestRate", loan.getRating().getCode()),
+                entry("loanRating", loan.getRating()),
                 entry("loanTerm", loan.getTermInMonths()),
                 entry("loanUrl", loan.getUrl()),
                 entry("loanRegion", loan.getRegion()),
@@ -92,7 +103,7 @@ final class Util {
     }
 
     private static Map<String, Object> perRating(final Function<Rating, Number> provider) {
-        return Stream.of(Rating.values()).collect(Collectors.toMap(Rating::getCode, provider::apply));
+        return Stream.of(Rating.values()).collect(Collectors.toMap(Rating::getCode, provider));
     }
 
     public static Map<String, Object> summarizePortfolioStructure(final PortfolioOverview portfolioOverview) {
@@ -104,7 +115,8 @@ final class Util {
                 entry("total", portfolioOverview.getCzkInvested()),
                 entry("totalRisk", portfolioOverview.getCzkAtRisk()),
                 entry("totalShare", portfolioOverview.getShareAtRisk()),
-                entry("balance", portfolioOverview.getCzkAvailable())
+                entry("balance", portfolioOverview.getCzkAvailable()),
+                entry("timestamp", toDate(portfolioOverview.getTimestamp()))
         );
     }
 
@@ -123,7 +135,7 @@ final class Util {
     }
 
     private static long getMonthsElapsed(final Investment i) {
-        return Period.between(i.getInvestmentDate().toLocalDate(), LocalDate.now()).toTotalMonths();
+        return Period.between(i.getInvestmentDate().toLocalDate(), DateUtil.localNow().toLocalDate()).toTotalMonths();
     }
 
     public static Map<String, Object> getLoanData(final Investment i, final MarketplaceLoan l) {

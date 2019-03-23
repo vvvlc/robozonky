@@ -1,5 +1,5 @@
 /*
- * Copyright 2018 The RoboZonky Project
+ * Copyright 2019 The RoboZonky Project
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -18,30 +18,37 @@ package com.github.robozonky.notifications;
 
 import java.time.Duration;
 import java.util.EnumMap;
+import java.util.HashMap;
 import java.util.Map;
 import java.util.OptionalInt;
+import java.util.stream.Stream;
 
 import com.github.robozonky.api.SessionInfo;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
+import org.apache.logging.log4j.LogManager;
+import org.apache.logging.log4j.Logger;
 
 public abstract class AbstractTargetHandler {
 
     private static final String HOURLY_LIMIT = "hourlyMaxEmails";
     protected final Target target;
     final ConfigStorage config;
-    private final Logger LOGGER = LoggerFactory.getLogger(getClass());
-    private final Counter notifications;
-    private final Map<SupportedListener, Counter> specificNotifications = new EnumMap<>(SupportedListener.class);
+    private final Logger LOGGER = LogManager.getLogger(getClass());
+    private final Map<SessionInfo, Counter> notifications = new HashMap<>(0);
+    private final Map<SupportedListener, Map<SessionInfo, Counter>> specificNotifications =
+            new EnumMap<>(SupportedListener.class);
 
     protected AbstractTargetHandler(final ConfigStorage config, final Target target) {
         this.config = config;
         this.target = target;
-        this.notifications = new Counter("global", getHourlyLimit(), Duration.ofHours(1));
     }
 
     private static String getCompositePropertyName(final SupportedListener listener, final String property) {
         return listener.getLabel() + "." + property;
+    }
+
+    private synchronized Counter getCounter(final SessionInfo sessionInfo) {
+        return notifications.computeIfAbsent(sessionInfo,
+                                             s -> new Counter(s, "global", getHourlyLimit(), Duration.ofHours(1)));
     }
 
     public Target getTarget() {
@@ -63,12 +70,12 @@ public abstract class AbstractTargetHandler {
 
     private boolean allowGlobal(final SupportedListener listener, final SessionInfo sessionInfo) {
         final boolean override = listener.overrideGlobalGag();
-        return override || notifications.allow(sessionInfo);
+        return override || getCounter(sessionInfo).allow();
     }
 
     private boolean shouldNotify(final SupportedListener listener, final SessionInfo sessionInfo) {
         final boolean global = allowGlobal(listener, sessionInfo);
-        return global && getSpecificCounter(listener).allow(sessionInfo);
+        return global && getSpecificCounter(sessionInfo, listener).allow();
     }
 
     private int getHourlyLimit() {
@@ -76,21 +83,41 @@ public abstract class AbstractTargetHandler {
         return (val < 0) ? Integer.MAX_VALUE : val;
     }
 
-    private synchronized Counter getSpecificCounter(final SupportedListener listener) {
-        return specificNotifications.computeIfAbsent(listener, key -> new Counter(this.getClass().getSimpleName(),
-                                                                                  getHourlyLimit(key)));
+    private synchronized Counter getSpecificCounter(final SessionInfo sessionInfo, final SupportedListener listener) {
+        return specificNotifications.computeIfAbsent(listener, key -> new HashMap<>(1))
+                .computeIfAbsent(sessionInfo, s -> new Counter(s, this.getClass().getSimpleName(),
+                                                               getHourlyLimit(listener)));
     }
 
-    boolean isEnabled() {
+    boolean isEnabledInSettings() {
         return config.readBoolean(target, "enabled", false);
     }
 
+    private boolean isEnabledInSettings(final SupportedListener listener) {
+        final String propName = getCompositePropertyName(listener, "enabled");
+        return this.isEnabledInSettings() && config.readBoolean(target, propName, false);
+    }
+
+    private boolean enableNoLongerDelinquentNotifications() {
+        /*
+         * "no longer delinquent" will only be triggered in case a loan was previously marked as delinquent - those are
+         * "companion" notifications, the first making no sense without the second. therefore we enable it in case
+         * any of the others is enabled as well. it can not be disabled.
+         */
+        return Stream.of(SupportedListener.LOAN_NOW_DELINQUENT, SupportedListener.LOAN_DELINQUENT_10_PLUS,
+                         SupportedListener.LOAN_DELINQUENT_30_PLUS, SupportedListener.LOAN_DELINQUENT_60_PLUS,
+                         SupportedListener.LOAN_DELINQUENT_90_PLUS)
+                .anyMatch(this::isEnabled);
+    }
+
     boolean isEnabled(final SupportedListener listener) {
-        if (listener == SupportedListener.TESTING) {
+        final boolean noLongerDelinquentEnabled = listener == SupportedListener.LOAN_NO_LONGER_DELINQUENT &&
+                enableNoLongerDelinquentNotifications();
+        if (noLongerDelinquentEnabled || listener == SupportedListener.TESTING) {
+            // testing is always enabled so that notification testing in the installer has something to work with
             return true;
         } else {
-            final String propName = getCompositePropertyName(listener, "enabled");
-            return this.isEnabled() && config.readBoolean(target, propName, false);
+            return isEnabledInSettings(listener);
         }
     }
 
@@ -106,8 +133,8 @@ public abstract class AbstractTargetHandler {
         LOGGER.trace("Triggering.");
         send(session, s.getSubject(), s.getMessage(data), s.getFallbackMessage(data));
         LOGGER.trace("Triggered.");
-        getSpecificCounter(listener).increase(session);
-        notifications.increase(session);
+        getSpecificCounter(session, listener).increase();
+        getCounter(session).increase();
         LOGGER.trace("Finished.");
     }
 

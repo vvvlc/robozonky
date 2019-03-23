@@ -1,5 +1,5 @@
 /*
- * Copyright 2018 The RoboZonky Project
+ * Copyright 2019 The RoboZonky Project
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -21,15 +21,15 @@ import com.github.robozonky.api.strategies.LoanDescriptor;
 import com.github.robozonky.strategy.natural.Wrapper;
 import org.junit.jupiter.api.Test;
 
-import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.*;
 
 class MarketplaceFilterConditionImplTest {
 
     @Test
     void doubleNegation() {
-        final MarketplaceFilterCondition negated = AlwaysAcceptingCondition.INSTANCE.invert();
+        final MarketplaceFilterCondition negated = AlwaysAcceptingCondition.INSTANCE.negate();
         assertThat(negated.test(Wrapper.wrap(new LoanDescriptor(Loan.custom().build())))).isFalse();
-        final MarketplaceFilterCondition doubleNegated = negated.invert();
+        final MarketplaceFilterCondition doubleNegated = negated.negate();
         assertThat(doubleNegated).isSameAs(AlwaysAcceptingCondition.INSTANCE);
     }
 }

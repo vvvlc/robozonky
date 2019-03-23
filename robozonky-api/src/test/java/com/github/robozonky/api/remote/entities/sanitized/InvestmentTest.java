@@ -1,5 +1,5 @@
 /*
- * Copyright 2018 The RoboZonky Project
+ * Copyright 2019 The RoboZonky Project
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -35,10 +35,9 @@ import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 
-import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.*;
 import static org.assertj.core.api.SoftAssertions.assertSoftly;
-import static org.mockito.Mockito.mock;
-import static org.mockito.Mockito.when;
+import static org.mockito.Mockito.*;
 
 @ExtendWith(MockitoExtension.class)
 class InvestmentTest {
@@ -50,6 +49,11 @@ class InvestmentTest {
     @DisplayName("Sanitization works.")
     void sanitizing() {
         assertThat(Investment.sanitized(mocked, (i) -> LocalDate.now())).isNotNull();
+    }
+
+    @Test
+    void hasToString() {
+        assertThat(Investment.custom().build().toString()).isNotEmpty();
     }
 
     @Test
@@ -107,8 +111,8 @@ class InvestmentTest {
             });
         }
 
-        private <T> void bool(final InvestmentBuilder builder, final Function<Boolean, InvestmentBuilder> setter,
-                              final Supplier<Boolean> getter) {
+        private void bool(final InvestmentBuilder builder, final Function<Boolean, InvestmentBuilder> setter,
+                          final Supplier<Boolean> getter) {
             assertThat(getter.get()).as("False before setting.").isFalse();
             final InvestmentBuilder newBuilder = setter.apply(true);
             assertSoftly(softly -> {
@@ -117,8 +121,8 @@ class InvestmentTest {
             });
         }
 
-        private <T> void integer(final InvestmentBuilder builder, final Function<Integer, InvestmentBuilder> setter,
-                                 final Supplier<Integer> getter, final int value) {
+        private void integer(final InvestmentBuilder builder, final Function<Integer, InvestmentBuilder> setter,
+                             final Supplier<Integer> getter, final int value) {
             assertThat(getter.get()).as("False before setting.").isLessThanOrEqualTo(0);
             final InvestmentBuilder newBuilder = setter.apply(value);
             assertSoftly(softly -> {
@@ -140,6 +144,11 @@ class InvestmentTest {
         @Test
         void loanId() {
             integer(b, b::setLoanId, b::getLoanId, 1);
+        }
+
+        @Test
+        void daysPastDue() {
+            integer(b, b::setDaysPastDue, b::getDaysPastDue, 1);
         }
 
         @Test
@@ -203,18 +212,18 @@ class InvestmentTest {
         }
 
         @Test
-        void rating() {
-            standard(b, b::setRating, b::getRating, Rating.D);
-        }
-
-        @Test
         void investmentStatus() {
             standard(b, b::setStatus, b::getStatus, InvestmentStatus.ACTIVE);
         }
 
         @Test
+        void rating() {
+            standard(b, b::setRating, b::getRating, Rating.D);
+        }
+
+        @Test
         void originalPrincipal() {
-            standard(b, b::setAmountInvested, b::getOriginalPrincipal, BigDecimal.ONE);
+            standard(b, b::setOriginalPrincipal, b::getOriginalPrincipal, BigDecimal.ONE);
         }
 
         @Test
@@ -250,6 +259,11 @@ class InvestmentTest {
         @Test
         void interestRate() {
             standard(b, b::setInterestRate, b::getInterestRate, BigDecimal.ONE);
+        }
+
+        @Test
+        void revenueRate() {
+            standard(b, b::setRevenueRate, b::getRevenueRate, BigDecimal.ONE);
         }
     }
 }

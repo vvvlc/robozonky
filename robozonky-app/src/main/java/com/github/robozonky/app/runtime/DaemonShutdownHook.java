@@ -1,5 +1,5 @@
 /*
- * Copyright 2018 The RoboZonky Project
+ * Copyright 2019 The RoboZonky Project
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -16,12 +16,12 @@
 
 package com.github.robozonky.app.runtime;
 
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
+import org.apache.logging.log4j.LogManager;
+import org.apache.logging.log4j.Logger;
 
 class DaemonShutdownHook extends Thread {
 
-    private static final Logger LOGGER = LoggerFactory.getLogger(DaemonShutdownHook.class);
+    private static final Logger LOGGER = LogManager.getLogger(DaemonShutdownHook.class);
 
     private final ShutdownEnabler shutdownEnabler;
     private final Lifecycle lifecycle;
@@ -35,7 +35,7 @@ class DaemonShutdownHook extends Thread {
     public void run() {
         LOGGER.debug("Shutdown requested through {}.", lifecycle);
         // will release the main thread and thus terminate the daemon
-        lifecycle.resumeToShutdown();
+        lifecycle.resume();
         // only allow to shut down after the daemon has been closed by the app
         try {
             shutdownEnabler.waitUntilTriggered();

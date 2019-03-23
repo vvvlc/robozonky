@@ -1,5 +1,5 @@
 /*
- * Copyright 2018 The RoboZonky Project
+ * Copyright 2019 The RoboZonky Project
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -33,10 +33,9 @@ import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 
-import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.*;
 import static org.assertj.core.api.SoftAssertions.assertSoftly;
-import static org.mockito.Mockito.mock;
-import static org.mockito.Mockito.when;
+import static org.mockito.Mockito.*;
 
 @ExtendWith(MockitoExtension.class)
 class DevelopmentTest {
@@ -65,6 +64,11 @@ class DevelopmentTest {
         assertThat(d).isNotNull();
     }
 
+    @Test
+    void hasToString() {
+        assertThat(Development.custom().build().toString()).isNotEmpty();
+    }
+
     @Nested
     @DisplayName("Setters for ")
     class SetterTest {
@@ -89,6 +93,21 @@ class DevelopmentTest {
                 softly.assertThat(newBuilder).as("Setter returned itself.").isSameAs(builder);
                 softly.assertThat(getter.get()).as("Correct value was set.").contains(value);
             });
+        }
+
+        private <T> void integer(final DevelopmentBuilder builder, final Function<Integer, DevelopmentBuilder> setter,
+                                 final Supplier<Integer> getter, final int value) {
+            assertThat(getter.get()).as("False before setting.").isLessThanOrEqualTo(0);
+            final DevelopmentBuilder newBuilder = setter.apply(value);
+            assertSoftly(softly -> {
+                softly.assertThat(newBuilder).as("Setter returned itself.").isSameAs(builder);
+                softly.assertThat(getter.get()).as("Correct value was set.").isEqualTo(value);
+            });
+        }
+
+        @Test
+        void loanId() {
+            integer(db, db::setLoanId, db::getLoanId, 1);
         }
 
         @Test

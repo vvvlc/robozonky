@@ -1,5 +1,5 @@
 /*
- * Copyright 2018 The RoboZonky Project
+ * Copyright 2019 The RoboZonky Project
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -18,15 +18,16 @@ package com.github.robozonky.notifications;
 
 import java.io.BufferedReader;
 import java.io.ByteArrayInputStream;
-import java.io.IOException;
 import java.io.InputStreamReader;
 import java.net.URL;
 import java.util.Optional;
 import java.util.stream.Collectors;
 
-import com.github.robozonky.internal.api.Defaults;
-import com.github.robozonky.util.IoUtil;
-import com.github.robozonky.util.Refreshable;
+import com.github.robozonky.common.async.Refreshable;
+import com.github.robozonky.internal.util.UrlUtil;
+import io.vavr.control.Try;
+
+import static com.github.robozonky.internal.api.Defaults.CHARSET;
 
 public final class RefreshableConfigStorage extends Refreshable<ConfigStorage> {
 
@@ -43,30 +44,25 @@ public final class RefreshableConfigStorage extends Refreshable<ConfigStorage> {
         run();
     }
 
-    private static String readUrl(final URL url) throws IOException {
-        return IoUtil.tryFunction(() -> new BufferedReader(new InputStreamReader(url.openStream(), Defaults.CHARSET)),
-                                  r -> r.lines().collect(Collectors.joining(System.lineSeparator())));
-    }
-
     @Override
     protected Optional<ConfigStorage> transform(final String source) {
-        try {
-            return IoUtil.tryFunction(() -> new ByteArrayInputStream(source.getBytes(Defaults.CHARSET)),
-                                      baos -> Optional.of(ConfigStorage.create(baos)));
-        } catch (final IOException ex) {
-            LOGGER.warn("Failed transforming source.", ex);
-            return Optional.empty();
-        }
+        return Try.withResources(() -> new ByteArrayInputStream(source.getBytes(CHARSET)))
+                .of(baos -> Optional.of(ConfigStorage.create(baos)))
+                .getOrElseGet(ex -> {
+                    logger.warn("Failed transforming source.", ex);
+                    return Optional.empty();
+                });
     }
 
     @Override
     protected String getLatestSource() {
-        LOGGER.debug("Reading notification configuration from '{}'.", source);
-        try {
-            return RefreshableConfigStorage.readUrl(source);
-        } catch (final IOException ex) {
-            LOGGER.warn("Failed reading notification configuration from '{}' due to '{}'.", source, ex.getMessage());
-            return null;
-        }
+        logger.debug("Reading notification configuration from '{}'.", source);
+        return Try.withResources(() -> new BufferedReader(new InputStreamReader(UrlUtil.open(source), CHARSET)))
+                .of(r -> r.lines().collect(Collectors.joining(System.lineSeparator())))
+                .getOrElseGet(t -> {
+                    logger.warn("Failed reading notification configuration from '{}' due to '{}'.", source,
+                                t.getMessage());
+                    return null;
+                });
     }
 }

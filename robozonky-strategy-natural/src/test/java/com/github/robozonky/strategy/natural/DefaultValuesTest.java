@@ -1,5 +1,5 @@
 /*
- * Copyright 2018 The RoboZonky Project
+ * Copyright 2019 The RoboZonky Project
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -16,15 +16,20 @@
 
 package com.github.robozonky.strategy.natural;
 
+import java.time.Clock;
+import java.time.Instant;
+
 import com.github.robozonky.api.remote.entities.sanitized.Loan;
 import com.github.robozonky.api.strategies.LoanDescriptor;
+import com.github.robozonky.internal.api.Defaults;
+import com.github.robozonky.internal.util.AbstractMinimalRoboZonkyTest;
+import com.github.robozonky.internal.util.DateUtil;
 import org.junit.jupiter.api.Test;
 
-import static org.assertj.core.api.Assertions.assertThat;
-import static org.assertj.core.api.Assertions.assertThatThrownBy;
+import static org.assertj.core.api.Assertions.*;
 import static org.assertj.core.api.SoftAssertions.assertSoftly;
 
-class DefaultValuesTest {
+class DefaultValuesTest extends AbstractMinimalRoboZonkyTest {
 
     @Test
     void construct() {
@@ -60,5 +65,15 @@ class DefaultValuesTest {
         final DefaultPortfolio p = DefaultPortfolio.EMPTY;
         final DefaultValues sut = new DefaultValues(p);
         assertThatThrownBy(() -> sut.setTargetPortfolioSize(0)).isInstanceOf(IllegalArgumentException.class);
+    }
+
+    @Test
+    void setExitStrategy() {
+        setClock(Clock.fixed(Instant.EPOCH, Defaults.ZONE_ID));
+        final ExitProperties p = new ExitProperties(DateUtil.localNow().plusMonths(1).toLocalDate());
+        final DefaultValues v = new DefaultValues(DefaultPortfolio.EMPTY);
+        assertThat(v.getMonthsBeforeExit()).isEqualTo(-1);
+        v.setExitProperties(p);
+        assertThat(v.getMonthsBeforeExit()).isEqualTo(1);
     }
 }

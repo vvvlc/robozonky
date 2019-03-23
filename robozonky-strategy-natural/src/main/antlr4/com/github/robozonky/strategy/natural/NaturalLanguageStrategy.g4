@@ -7,7 +7,7 @@ import Defaults, InvestmentSize, PortfolioStructure, MarketplaceFilters;
     import java.math.BigInteger;
     import java.util.Collection;
     import java.util.Collections;
-    import org.slf4j.LoggerFactory;
+    import org.apache.logging.log4j.LogManager;
     import com.github.robozonky.api.remote.enums.*;
     import com.github.robozonky.api.remote.entities.*;
     import com.github.robozonky.strategy.natural.*;
@@ -20,7 +20,7 @@ primaryExpression returns [ParsedStrategy result] :
     (
         ( s=portfolioExpression {
             final DefaultValues v = new DefaultValues($s.result);
-            // enable primary and secondary marketplaces, disable selling
+            // enable primary and secondary marketplaces, disable selling, do not enable reservation system
             final FilterSupplier f = new FilterSupplier(v, Collections.emptySet(), Collections.emptySet());
             $result = new ParsedStrategy(v, Collections.emptySet(), Collections.emptyMap(), f); })
         | ( c=complexExpression { $result = $c.result; })
@@ -73,7 +73,7 @@ complexExpression returns [ParsedStrategy result]
                 }
             )? {
                 if (marketplaceFiltersMissing) {
-                    LoggerFactory.getLogger(this.getClass())
+                    LogManager.getLogger(this.getClass())
                         .warn("Marketplace filters are missing without excuse. This is deprecated and will eventually break.");
                 }
             }
@@ -102,7 +102,7 @@ complexExpression returns [ParsedStrategy result]
         )
     )? {
         if (!emptySellFiltersIsOk) {
-            LoggerFactory.getLogger(this.getClass())
+            LogManager.getLogger(this.getClass())
                 .warn("Sell filters are missing without excuse. This is deprecated and will eventually break.");
         }
     }

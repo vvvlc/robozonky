@@ -1,5 +1,5 @@
 /*
- * Copyright 2018 The RoboZonky Project
+ * Copyright 2019 The RoboZonky Project
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -34,7 +34,7 @@ import com.github.robozonky.api.notifications.LoanLostEvent;
 import com.github.robozonky.api.notifications.LoanNoLongerDelinquentEvent;
 import com.github.robozonky.api.notifications.LoanNowDelinquentEvent;
 import com.github.robozonky.api.notifications.LoanRepaidEvent;
-import com.github.robozonky.api.notifications.RoboZonkyCrashedEvent;
+import com.github.robozonky.api.notifications.ReservationAcceptedEvent;
 import com.github.robozonky.api.notifications.RoboZonkyDaemonFailedEvent;
 import com.github.robozonky.api.notifications.RoboZonkyEndingEvent;
 import com.github.robozonky.api.notifications.RoboZonkyExperimentalUpdateDetectedEvent;
@@ -55,7 +55,7 @@ import com.github.robozonky.notifications.listeners.LoanDelinquentEventListener;
 import com.github.robozonky.notifications.listeners.LoanLostEventListener;
 import com.github.robozonky.notifications.listeners.LoanNoLongerDelinquentEventListener;
 import com.github.robozonky.notifications.listeners.LoanRepaidEventListener;
-import com.github.robozonky.notifications.listeners.RoboZonkyCrashedEventListener;
+import com.github.robozonky.notifications.listeners.ReservationAcceptedEventListener;
 import com.github.robozonky.notifications.listeners.RoboZonkyDaemonFailedEventListener;
 import com.github.robozonky.notifications.listeners.RoboZonkyEndingEventListener;
 import com.github.robozonky.notifications.listeners.RoboZonkyExperimentalUpdateDetectedEventListener;
@@ -143,6 +143,17 @@ public enum SupportedListener {
         @Override
         public EventListener getListener(final AbstractTargetHandler targetHandler) {
             return new SaleOfferedEventListener(this, targetHandler);
+        }
+    },
+    RESERVATION_ACCEPTED {
+        @Override
+        public Class<? extends Event> getEventType() {
+            return ReservationAcceptedEvent.class;
+        }
+
+        @Override
+        public EventListener getListener(final AbstractTargetHandler targetHandler) {
+            return new ReservationAcceptedEventListener(this, targetHandler);
         }
     },
     LOAN_NOW_DELINQUENT {
@@ -276,22 +287,6 @@ public enum SupportedListener {
             return new BalanceUnderMinimumEventListener(this, targetHandler);
         }
     },
-    CRASHED {
-        @Override
-        public Class<? extends Event> getEventType() {
-            return RoboZonkyCrashedEvent.class;
-        }
-
-        @Override
-        public boolean overrideGlobalGag() {
-            return true;
-        }
-
-        @Override
-        public EventListener getListener(final AbstractTargetHandler targetHandler) {
-            return new RoboZonkyCrashedEventListener(this, targetHandler);
-        }
-    },
     DAEMON_FAILED {
         @Override
         public Class<? extends Event> getEventType() {
@@ -366,6 +361,11 @@ public enum SupportedListener {
         @Override
         public Class<? extends Event> getEventType() {
             return RoboZonkyExperimentalUpdateDetectedEvent.class;
+        }
+
+        @Override
+        public boolean overrideGlobalGag() {
+            return true;
         }
 
         @Override
